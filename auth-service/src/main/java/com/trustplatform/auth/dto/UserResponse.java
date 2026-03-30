@@ -8,4 +8,6 @@ import lombok.Data;
 public class UserResponse {
     private String userId;
     private String email;
+    private boolean isVerified;
+    private String verificationLevel;
 }
