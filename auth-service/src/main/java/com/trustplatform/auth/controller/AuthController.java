@@ -27,7 +27,7 @@ public class AuthController {
 
         User user = new User();
         user.setEmail(request.getEmail());
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
 
         userRepository.save(user);
         return ResponseEntity.ok("User created");
