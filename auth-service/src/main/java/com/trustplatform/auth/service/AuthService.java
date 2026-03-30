@@ -4,6 +4,7 @@ import com.trustplatform.auth.dto.AuthResponse;
 import com.trustplatform.auth.dto.LoginRequest;
 import com.trustplatform.auth.entity.User;
 import com.trustplatform.auth.repository.UserRepository;
+import com.trustplatform.auth.security.JwtService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -14,10 +15,12 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
 
-    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtService jwtService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.jwtService = jwtService;
     }
 
     public AuthResponse login(LoginRequest request) {
@@ -28,7 +31,7 @@ public class AuthService {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
         }
 
-        // TODO: generate JWT token
-        return new AuthResponse("token-placeholder", user.getEmail());
+        String token = jwtService.generateToken(user);
+        return new AuthResponse(token);
     }
 }
