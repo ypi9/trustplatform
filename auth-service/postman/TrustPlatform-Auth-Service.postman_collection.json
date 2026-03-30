@@ -4,13 +4,6 @@
     "description": "API collection for the TrustPlatform authentication service",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
-  "auth": {
-    "type": "basic",
-    "basic": [
-      { "key": "username", "value": "admin", "type": "string" },
-      { "key": "password", "value": "admin", "type": "string" }
-    ]
-  },
   "variable": [
     {
       "key": "baseUrl",
@@ -25,6 +18,7 @@
         {
           "name": "Signup",
           "request": {
+            "auth": { "type": "noauth" },
             "method": "POST",
             "header": [
               {
@@ -42,6 +36,30 @@
               "path": ["auth", "signup"]
             },
             "description": "Register a new user with email and password"
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Login with email and password"
           },
           "response": []
         }
