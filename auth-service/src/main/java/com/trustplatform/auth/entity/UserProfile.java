@@ -16,8 +16,4 @@ public class UserProfile {
 
     @Enumerated(EnumType.STRING)
     private VerificationLevel verificationLevel;
-
-    public enum VerificationLevel {
-        NONE, BASIC, ADVANCED
-    }
 }

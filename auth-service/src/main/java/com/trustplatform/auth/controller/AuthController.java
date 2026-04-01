@@ -6,6 +6,7 @@ import com.trustplatform.auth.dto.SignupRequest;
 import com.trustplatform.auth.dto.UserResponse;
 import com.trustplatform.auth.entity.User;
 import com.trustplatform.auth.entity.UserProfile;
+import com.trustplatform.auth.entity.VerificationLevel;
 import com.trustplatform.auth.repository.UserProfileRepository;
 import com.trustplatform.auth.repository.UserRepository;
 import com.trustplatform.auth.service.AuthService;
@@ -53,7 +54,7 @@ public class AuthController {
         profile.setFullName("");
         profile.setPhone("");
         profile.setVerified(false);
-        profile.setVerificationLevel(UserProfile.VerificationLevel.NONE);
+        profile.setVerificationLevel(VerificationLevel.NONE);
         userProfileRepository.save(profile);
 
         auditLogService.log("user_registered", user.getId(), "{\"email\":\"" + user.getEmail() + "\"}");
