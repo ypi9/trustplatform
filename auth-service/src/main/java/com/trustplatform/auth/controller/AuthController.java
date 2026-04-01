@@ -18,8 +18,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
-import java.util.UUID;
-
 @RestController
 @RequestMapping("/auth")
 public class AuthController {
@@ -51,14 +49,14 @@ public class AuthController {
 
         // Create UserProfile with defaults
         UserProfile profile = new UserProfile();
-        profile.setUserId(user.getId().toString());
+        profile.setUserId(user.getId());
         profile.setFullName("");
         profile.setPhone("");
         profile.setVerified(false);
         profile.setVerificationLevel(UserProfile.VerificationLevel.NONE);
         userProfileRepository.save(profile);
 
-        auditLogService.log("user_registered", user.getId() != null ? UUID.fromString(user.getId().toString()) : null, "{\"email\":\"" + user.getEmail() + "\"}");
+        auditLogService.log("user_registered", user.getId(), "{\"email\":\"" + user.getEmail() + "\"}");
 
         return ResponseEntity.ok("User created");
     }
@@ -76,7 +74,7 @@ public class AuthController {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
-        UserProfile profile = userProfileRepository.findById(user.getId().toString())
+        UserProfile profile = userProfileRepository.findById(user.getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Profile not found"));
 
         UserResponse response = new UserResponse(
