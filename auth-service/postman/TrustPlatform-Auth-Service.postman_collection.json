@@ -236,6 +236,78 @@
             "description": "Get current verification level and latest request details (expects 200)."
           },
           "response": []
+        },
+        {
+          "name": "Review Verification (approve)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requestId\": \"PASTE_REQUEST_ID_HERE\",\n  \"decision\": \"APPROVED\",\n  \"reviewNotes\": \"Document looks valid\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/verification/review",
+              "host": ["{{baseUrl}}"],
+              "path": ["verification", "review"]
+            },
+            "description": "Approve a pending verification request (expects 200 with VERIFIED level)."
+          },
+          "response": []
+        },
+        {
+          "name": "Review Verification (reject)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requestId\": \"PASTE_REQUEST_ID_HERE\",\n  \"decision\": \"REJECTED\",\n  \"reviewNotes\": \"Document is blurry\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/verification/review",
+              "host": ["{{baseUrl}}"],
+              "path": ["verification", "review"]
+            },
+            "description": "Reject a pending verification request (expects 200 with REJECTED level)."
+          },
+          "response": []
+        },
+        {
+          "name": "Review Verification (already reviewed -> 409)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requestId\": \"PASTE_REQUEST_ID_HERE\",\n  \"decision\": \"APPROVED\",\n  \"reviewNotes\": \"Trying again\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/verification/review",
+              "host": ["{{baseUrl}}"],
+              "path": ["verification", "review"]
+            },
+            "description": "Re-review an already reviewed request (expects 409 Conflict)."
+          },
+          "response": []
         }
       ]
     }

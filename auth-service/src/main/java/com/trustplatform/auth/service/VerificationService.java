@@ -1,5 +1,7 @@
 package com.trustplatform.auth.service;
 
+import com.trustplatform.auth.dto.ReviewVerificationRequest;
+import com.trustplatform.auth.dto.ReviewVerificationResponse;
 import com.trustplatform.auth.dto.SubmitVerificationRequest;
 import com.trustplatform.auth.dto.VerificationResponse;
 import com.trustplatform.auth.dto.VerificationStatusResponse;
@@ -14,6 +16,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.time.Instant;
+import java.util.UUID;
 
 @Service
 public class VerificationService {
@@ -101,6 +106,60 @@ public class VerificationService {
         return new VerificationStatusResponse(
                 profile.getVerificationLevel().name(),
                 latestRequest
+        );
+    }
+
+    @Transactional
+    public ReviewVerificationResponse review(ReviewVerificationRequest request) {
+        UUID requestId;
+        try {
+            requestId = UUID.fromString(request.getRequestId());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid requestId format");
+        }
+
+        // Find verification request
+        VerificationRequest verificationRequest = verificationRequestRepository.findById(requestId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Verification request not found"));
+
+        // Guard: reject if not PENDING
+        if (verificationRequest.getStatus() != VerificationStatus.PENDING) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Request already reviewed with status: " + verificationRequest.getStatus().name());
+        }
+
+        // Parse decision
+        VerificationStatus decision = VerificationStatus.valueOf(request.getDecision());
+
+        // Update verification request
+        verificationRequest.setStatus(decision);
+        verificationRequest.setReviewedAt(Instant.now());
+        verificationRequest.setReviewedBy("admin");
+        verificationRequest.setReviewNotes(request.getReviewNotes());
+        verificationRequestRepository.save(verificationRequest);
+
+        // Update user profile
+        UserProfile profile = userProfileRepository.findById(verificationRequest.getUserId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Profile not found"));
+
+        if (decision == VerificationStatus.APPROVED) {
+            profile.setVerificationLevel(VerificationLevel.VERIFIED);
+            profile.setVerified(true);
+        } else {
+            profile.setVerificationLevel(VerificationLevel.REJECTED);
+            profile.setVerified(false);
+        }
+        userProfileRepository.save(profile);
+
+        // Audit log
+        String action = decision == VerificationStatus.APPROVED ? "verification_approved" : "verification_rejected";
+        auditLogService.log(action, verificationRequest.getUserId(),
+                "{\"requestId\":\"" + requestId + "\",\"reviewNotes\":\"" + (request.getReviewNotes() != null ? request.getReviewNotes() : "") + "\"}");
+
+        return new ReviewVerificationResponse(
+                requestId.toString(),
+                decision.name(),
+                profile.getVerificationLevel().name()
         );
     }
 }

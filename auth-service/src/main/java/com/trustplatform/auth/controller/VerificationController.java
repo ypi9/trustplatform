@@ -1,5 +1,7 @@
 package com.trustplatform.auth.controller;
 
+import com.trustplatform.auth.dto.ReviewVerificationRequest;
+import com.trustplatform.auth.dto.ReviewVerificationResponse;
 import com.trustplatform.auth.dto.SubmitVerificationRequest;
 import com.trustplatform.auth.dto.VerificationResponse;
 import com.trustplatform.auth.dto.VerificationStatusResponse;
@@ -33,6 +35,14 @@ public class VerificationController {
     public ResponseEntity<VerificationStatusResponse> status(Authentication authentication) {
         String email = authentication.getName();
         VerificationStatusResponse response = verificationService.getStatus(email);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/review")
+    public ResponseEntity<ReviewVerificationResponse> review(
+            @Valid @RequestBody ReviewVerificationRequest request
+    ) {
+        ReviewVerificationResponse response = verificationService.review(request);
         return ResponseEntity.ok(response);
     }
 }
