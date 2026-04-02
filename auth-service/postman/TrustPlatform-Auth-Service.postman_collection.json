@@ -9,6 +9,16 @@
       "key": "baseUrl",
       "value": "http://localhost:8080",
       "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "documentUrl",
+      "value": "https://example.com/kyc/id-card.png",
+      "type": "string"
     }
   ],
   "item": [
@@ -115,6 +125,95 @@
               "path": ["auth", "me"]
             },
             "description": "Get current user info with valid token (set accessToken variable from login response)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Verification",
+      "item": [
+        {
+          "name": "Submit Verification (success)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentUrl\": \"{{documentUrl}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/verification/submit",
+              "host": ["{{baseUrl}}"],
+              "path": ["verification", "submit"]
+            },
+            "description": "Submit a verification request (expects 200 with requestId + PENDING)."
+          },
+          "response": []
+        },
+        {
+          "name": "Submit Verification (missing documentUrl -> 400)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentUrl\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/verification/submit",
+              "host": ["{{baseUrl}}"],
+              "path": ["verification", "submit"]
+            },
+            "description": "Submit without a valid documentUrl (expects 400 Bad Request)."
+          },
+          "response": []
+        },
+        {
+          "name": "Submit Verification (already pending/verified -> 409)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentUrl\": \"{{documentUrl}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/verification/submit",
+              "host": ["{{baseUrl}}"],
+              "path": ["verification", "submit"]
+            },
+            "description": "Re-submit when state is PENDING or VERIFIED (expects 409 Conflict)."
           },
           "response": []
         }

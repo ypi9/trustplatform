@@ -42,10 +42,23 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
-    public ResponseEntity<Map<String, Object>> handleDuplicateEmail(DataIntegrityViolationException ex) {
+    public ResponseEntity<Map<String, Object>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+        String message = "Data integrity violation";
+        String rootMessage = ex.getMostSpecificCause().getMessage();
+
+        if (rootMessage != null) {
+            if (rootMessage.contains("users_email_key") || rootMessage.contains("email")) {
+                message = "Email already exists";
+            } else if (rootMessage.contains("verification_requests")) {
+                message = "Verification request conflict";
+            } else if (rootMessage.contains("user_profile")) {
+                message = "User profile conflict";
+            }
+        }
+
         Map<String, Object> response = new HashMap<>();
         response.put("status", HttpStatus.CONFLICT.value());
-        response.put("error", "Email already exists");
+        response.put("error", message);
         response.put("timestamp", Instant.now().toString());
 
         return ResponseEntity.status(HttpStatus.CONFLICT).body(response);

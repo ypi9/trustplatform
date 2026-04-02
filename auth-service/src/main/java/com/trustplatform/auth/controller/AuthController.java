@@ -4,6 +4,7 @@ import com.trustplatform.auth.dto.AuthResponse;
 import com.trustplatform.auth.dto.LoginRequest;
 import com.trustplatform.auth.dto.SignupRequest;
 import com.trustplatform.auth.dto.UserResponse;
+import com.trustplatform.auth.dto.SubmitVerificationRequest;
 import com.trustplatform.auth.entity.User;
 import com.trustplatform.auth.entity.UserProfile;
 import com.trustplatform.auth.entity.VerificationLevel;
@@ -18,6 +19,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+
 
 @RestController
 @RequestMapping("/auth")
