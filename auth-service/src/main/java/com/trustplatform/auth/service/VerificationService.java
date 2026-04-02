@@ -2,6 +2,7 @@ package com.trustplatform.auth.service;
 
 import com.trustplatform.auth.dto.SubmitVerificationRequest;
 import com.trustplatform.auth.dto.VerificationResponse;
+import com.trustplatform.auth.dto.VerificationStatusResponse;
 import com.trustplatform.auth.entity.UserProfile;
 import com.trustplatform.auth.entity.VerificationLevel;
 import com.trustplatform.auth.entity.VerificationRequest;
@@ -74,6 +75,32 @@ public class VerificationService {
         return new VerificationResponse(
                 verificationRequest.getId().toString(),
                 verificationRequest.getStatus().name()
+        );
+    }
+
+    public VerificationStatusResponse getStatus(String email) {
+        var user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        UserProfile profile = userProfileRepository.findById(user.getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Profile not found"));
+
+        VerificationStatusResponse.LatestRequest latestRequest = null;
+
+        var latest = verificationRequestRepository.findTopByUserIdOrderByCreatedAtDesc(user.getId());
+        if (latest.isPresent()) {
+            VerificationRequest req = latest.get();
+            latestRequest = new VerificationStatusResponse.LatestRequest(
+                    req.getId().toString(),
+                    req.getStatus().name(),
+                    req.getDocumentUrl(),
+                    req.getCreatedAt().toString()
+            );
+        }
+
+        return new VerificationStatusResponse(
+                profile.getVerificationLevel().name(),
+                latestRequest
         );
     }
 }

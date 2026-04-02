@@ -216,6 +216,26 @@
             "description": "Re-submit when state is PENDING or VERIFIED (expects 409 Conflict)."
           },
           "response": []
+        },
+        {
+          "name": "Get Verification Status",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/verification/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["verification", "status"]
+            },
+            "description": "Get current verification level and latest request details (expects 200)."
+          },
+          "response": []
         }
       ]
     }
