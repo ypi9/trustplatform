@@ -1,6 +1,7 @@
 package com.trustplatform.auth.repository;
 
 import com.trustplatform.auth.entity.VerificationRequest;
+import com.trustplatform.auth.entity.VerificationStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -14,4 +15,10 @@ public interface VerificationRequestRepository extends JpaRepository<Verificatio
 
     // Get the most recent verification request for a user
     Optional<VerificationRequest> findTopByUserIdOrderByCreatedAtDesc(UUID userId);
+
+    // Get all requests, newest first
+    List<VerificationRequest> findAllByOrderByCreatedAtDesc();
+
+    // Filter by status, newest first
+    List<VerificationRequest> findByStatusOrderByCreatedAtDesc(VerificationStatus status);
 }

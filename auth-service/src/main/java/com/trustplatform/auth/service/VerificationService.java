@@ -3,6 +3,7 @@ package com.trustplatform.auth.service;
 import com.trustplatform.auth.dto.ReviewVerificationRequest;
 import com.trustplatform.auth.dto.ReviewVerificationResponse;
 import com.trustplatform.auth.dto.SubmitVerificationRequest;
+import com.trustplatform.auth.dto.VerificationRequestItem;
 import com.trustplatform.auth.dto.VerificationResponse;
 import com.trustplatform.auth.dto.VerificationStatusResponse;
 import com.trustplatform.auth.entity.UserProfile;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -161,5 +163,29 @@ public class VerificationService {
                 decision.name(),
                 profile.getVerificationLevel().name()
         );
+    }
+
+    public List<VerificationRequestItem> listRequests(String status) {
+        List<VerificationRequest> requests;
+
+        if (status != null && !status.isBlank()) {
+            try {
+                VerificationStatus filterStatus = VerificationStatus.valueOf(status.toUpperCase());
+                requests = verificationRequestRepository.findByStatusOrderByCreatedAtDesc(filterStatus);
+            } catch (IllegalArgumentException e) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid status: " + status);
+            }
+        } else {
+            requests = verificationRequestRepository.findAllByOrderByCreatedAtDesc();
+        }
+
+        return requests.stream().map(req -> new VerificationRequestItem(
+                req.getId().toString(),
+                req.getUserId().toString(),
+                req.getStatus().name(),
+                req.getDocumentUrl(),
+                req.getCreatedAt().toString(),
+                req.getReviewedAt() != null ? req.getReviewedAt().toString() : null
+        )).toList();
     }
 }

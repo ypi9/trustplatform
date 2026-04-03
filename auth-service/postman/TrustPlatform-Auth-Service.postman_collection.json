@@ -308,6 +308,42 @@
             "description": "Re-review an already reviewed request (expects 409 Conflict)."
           },
           "response": []
+        },
+        {
+          "name": "List All Requests",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/verification/requests",
+              "host": ["{{baseUrl}}"],
+              "path": ["verification", "requests"]
+            },
+            "description": "List all verification requests, newest first."
+          },
+          "response": []
+        },
+        {
+          "name": "List Requests (filter by PENDING)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/verification/requests?status=PENDING",
+              "host": ["{{baseUrl}}"],
+              "path": ["verification", "requests"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PENDING"
+                }
+              ]
+            },
+            "description": "List verification requests filtered by PENDING status."
+          },
+          "response": []
         }
       ]
     }

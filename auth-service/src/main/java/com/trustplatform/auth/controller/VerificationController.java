@@ -3,6 +3,7 @@ package com.trustplatform.auth.controller;
 import com.trustplatform.auth.dto.ReviewVerificationRequest;
 import com.trustplatform.auth.dto.ReviewVerificationResponse;
 import com.trustplatform.auth.dto.SubmitVerificationRequest;
+import com.trustplatform.auth.dto.VerificationRequestItem;
 import com.trustplatform.auth.dto.VerificationResponse;
 import com.trustplatform.auth.dto.VerificationStatusResponse;
 import com.trustplatform.auth.service.VerificationService;
@@ -10,6 +11,8 @@ import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/verification")
@@ -44,5 +47,13 @@ public class VerificationController {
     ) {
         ReviewVerificationResponse response = verificationService.review(request);
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/requests")
+    public ResponseEntity<List<VerificationRequestItem>> listRequests(
+            @RequestParam(required = false) String status
+    ) {
+        List<VerificationRequestItem> requests = verificationService.listRequests(status);
+        return ResponseEntity.ok(requests);
     }
 }
