@@ -4,7 +4,7 @@ import com.trustplatform.auth.dto.ReviewVerificationRequest;
 import com.trustplatform.auth.dto.ReviewVerificationResponse;
 import com.trustplatform.auth.dto.SubmitVerificationRequest;
 import com.trustplatform.auth.dto.VerificationRequestItem;
-import com.trustplatform.auth.dto.VerificationResponse;
+import com.trustplatform.auth.dto.SubmitVerificationResponse;
 import com.trustplatform.auth.dto.VerificationStatusResponse;
 import com.trustplatform.auth.service.VerificationService;
 import jakarta.validation.Valid;
@@ -25,12 +25,12 @@ public class VerificationController {
     }
 
     @PostMapping("/submit")
-    public ResponseEntity<VerificationResponse> submit(
+    public ResponseEntity<SubmitVerificationResponse> submit(
             Authentication authentication,
             @Valid @RequestBody SubmitVerificationRequest request
     ) {
         String email = authentication.getName();
-        VerificationResponse response = verificationService.submit(email, request);
+        SubmitVerificationResponse response = verificationService.submit(email, request);
         return ResponseEntity.ok(response);
     }
 

@@ -4,7 +4,7 @@ import com.trustplatform.auth.dto.ReviewVerificationRequest;
 import com.trustplatform.auth.dto.ReviewVerificationResponse;
 import com.trustplatform.auth.dto.SubmitVerificationRequest;
 import com.trustplatform.auth.dto.VerificationRequestItem;
-import com.trustplatform.auth.dto.VerificationResponse;
+import com.trustplatform.auth.dto.SubmitVerificationResponse;
 import com.trustplatform.auth.dto.VerificationStatusResponse;
 import com.trustplatform.auth.entity.UserProfile;
 import com.trustplatform.auth.entity.VerificationLevel;
@@ -22,6 +22,21 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Verification State Machine:
+ *
+ * User submits verification:
+ *   NONE     → PENDING  ✅
+ *   REJECTED → PENDING  ✅ (user can retry after rejection)
+ *   PENDING  → submit   ❌ "User already has a pending verification request"
+ *   VERIFIED → submit   ❌ "Verified users cannot submit a new verification request"
+ *
+ * Admin reviews request:
+ *   PENDING  → APPROVED → profile becomes VERIFIED  ✅
+ *   PENDING  → REJECTED → profile becomes REJECTED  ✅
+ *   APPROVED → review   ❌ "Only pending verification requests can be reviewed"
+ *   REJECTED → review   ❌ "Only pending verification requests can be reviewed"
+ */
 @Service
 public class VerificationService {
 
@@ -39,14 +54,17 @@ public class VerificationService {
         this.auditLogService = auditLogService;
     }
 
+    // ──────────────────────────────────────────────
+    // SUBMIT: User submits a new verification request
+    // ──────────────────────────────────────────────
     @Transactional
-    public VerificationResponse submit(String email, SubmitVerificationRequest request) {
-        // Reject invalid input
+    public SubmitVerificationResponse submit(String email, SubmitVerificationRequest request) {
+        // Validate input
         if (request.getDocumentUrl() == null || request.getDocumentUrl().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "documentUrl is required");
         }
 
-        // Get current user
+        // Load user
         var user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
@@ -54,14 +72,18 @@ public class VerificationService {
         UserProfile profile = userProfileRepository.findById(user.getId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Profile not found"));
 
-        // Reject if already verified
-        if (profile.getVerificationLevel() == VerificationLevel.VERIFIED) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "User is already verified");
-        }
-
-        // Reject if pending review
-        if (profile.getVerificationLevel() == VerificationLevel.PENDING) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Verification request already pending");
+        // ── State machine guard: only NONE or REJECTED can submit ──
+        switch (profile.getVerificationLevel()) {
+            case VERIFIED:
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "Verified users cannot submit a new verification request");
+            case PENDING:
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "User already has a pending verification request");
+            case NONE:
+            case REJECTED:
+                // Allowed — continue
+                break;
         }
 
         // Create new VerificationRequest
@@ -71,20 +93,24 @@ public class VerificationService {
         verificationRequest.setStatus(VerificationStatus.PENDING);
         verificationRequestRepository.save(verificationRequest);
 
-        // Update UserProfile verification level
+        // Update profile level: NONE/REJECTED → PENDING
         profile.setVerificationLevel(VerificationLevel.PENDING);
         userProfileRepository.save(profile);
 
         // Audit log
         auditLogService.log("verification_submitted", user.getId(),
-                "{\"requestId\":\"" + verificationRequest.getId() + "\",\"documentUrl\":\"" + request.getDocumentUrl() + "\"}");
+                "{\"requestId\":\"" + verificationRequest.getId()
+                + "\",\"documentUrl\":\"" + request.getDocumentUrl() + "\"}");
 
-        return new VerificationResponse(
+        return new SubmitVerificationResponse(
                 verificationRequest.getId().toString(),
                 verificationRequest.getStatus().name()
         );
     }
 
+    // ──────────────────────────────────────────────
+    // STATUS: User checks their verification status
+    // ──────────────────────────────────────────────
     public VerificationStatusResponse getStatus(String email) {
         var user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
@@ -111,8 +137,12 @@ public class VerificationService {
         );
     }
 
+    // ──────────────────────────────────────────────
+    // REVIEW: Admin approves or rejects a request
+    // ──────────────────────────────────────────────
     @Transactional
     public ReviewVerificationResponse review(ReviewVerificationRequest request) {
+        // Validate requestId format
         UUID requestId;
         try {
             requestId = UUID.fromString(request.getRequestId());
@@ -124,15 +154,26 @@ public class VerificationService {
         VerificationRequest verificationRequest = verificationRequestRepository.findById(requestId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Verification request not found"));
 
-        // Guard: reject if not PENDING
+        // ── State machine guard: only PENDING can be reviewed ──
         if (verificationRequest.getStatus() != VerificationStatus.PENDING) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Request already reviewed with status: " + verificationRequest.getStatus().name());
+                    "Only pending verification requests can be reviewed. Current status: "
+                    + verificationRequest.getStatus().name());
         }
 
-        // Parse decision
-        VerificationStatus decision = VerificationStatus.valueOf(request.getDecision());
+        // Parse and validate decision
+        VerificationStatus decision;
+        try {
+            decision = VerificationStatus.valueOf(request.getDecision().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Invalid decision. Must be APPROVED or REJECTED");
+        }
 
+        if (decision == VerificationStatus.PENDING) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Decision must be APPROVED or REJECTED, not PENDING");
+        }
         // Update verification request
         verificationRequest.setStatus(decision);
         verificationRequest.setReviewedAt(Instant.now());
@@ -154,9 +195,14 @@ public class VerificationService {
         userProfileRepository.save(profile);
 
         // Audit log
-        String action = decision == VerificationStatus.APPROVED ? "verification_approved" : "verification_rejected";
+        String action = decision == VerificationStatus.APPROVED
+                ? "verification_approved"
+                : "verification_rejected";
         auditLogService.log(action, verificationRequest.getUserId(),
-                "{\"requestId\":\"" + requestId + "\",\"reviewNotes\":\"" + (request.getReviewNotes() != null ? request.getReviewNotes() : "") + "\"}");
+                "{\"requestId\":\"" + requestId
+                + "\",\"decision\":\"" + decision.name()
+                + "\",\"reviewNotes\":\"" + (request.getReviewNotes() != null ? request.getReviewNotes() : "")
+                + "\"}");
 
         return new ReviewVerificationResponse(
                 requestId.toString(),
@@ -165,16 +211,21 @@ public class VerificationService {
         );
     }
 
+    // ──────────────────────────────────────────────
+    // LIST: Admin lists verification requests
+    // ──────────────────────────────────────────────
     public List<VerificationRequestItem> listRequests(String status) {
         List<VerificationRequest> requests;
 
         if (status != null && !status.isBlank()) {
+            VerificationStatus filterStatus;
             try {
-                VerificationStatus filterStatus = VerificationStatus.valueOf(status.toUpperCase());
-                requests = verificationRequestRepository.findByStatusOrderByCreatedAtDesc(filterStatus);
+                filterStatus = VerificationStatus.valueOf(status.toUpperCase());
             } catch (IllegalArgumentException e) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid status: " + status);
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Invalid status filter: " + status + ". Must be PENDING, APPROVED, or REJECTED");
             }
+            requests = verificationRequestRepository.findByStatusOrderByCreatedAtDesc(filterStatus);
         } else {
             requests = verificationRequestRepository.findAllByOrderByCreatedAtDesc();
         }

@@ -5,7 +5,7 @@ import lombok.Data;
 
 @Data
 @AllArgsConstructor
-public class VerificationResponse {
+public class SubmitVerificationResponse {
     private String requestId;
     private String status;
 }
