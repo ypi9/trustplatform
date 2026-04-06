@@ -1,193 +1,275 @@
 # TrustPlatform Auth Service
 
-A Spring Boot authentication service with JWT-based security, user profiles, and audit logging.
-
-## Tech Stack
-
-- Java 21, Spring Boot 3.5.13
-- PostgreSQL 17
-- Spring Security (stateless JWT)
-- Spring Data JPA / Hibernate
-- JJWT 0.12.6
-- Lombok
+A JWT-based authentication and identity verification service built with Spring Boot.
 
 ## Prerequisites
 
-- Java 21+
-- PostgreSQL 17+
-- Maven (or use the included `./mvnw` wrapper)
+- Java 17+
+- PostgreSQL
+- Maven
 
 ## Database Setup
 
 ```bash
-# Start PostgreSQL (Homebrew)
-brew services start postgresql@17
+# Start PostgreSQL (if using Homebrew)
+brew services start postgresql
 
-# Create the database
+# Create database
 createdb -U <your_username> authdb
-
-# Verify connection
-psql -U <your_username> -d authdb -c "SELECT 1;"
 ```
 
 ## Run the App
 
 ```bash
 cd auth-service
-
-# Compile
-./mvnw compile
-
-# Run
 ./mvnw spring-boot:run
 ```
 
-The app starts on `http://localhost:8080`.
+App starts at `http://localhost:8080`
+
+## Run Tests
+
+```bash
+cd auth-service
+./mvnw test
+```
+
+---
 
 ## API Endpoints
 
+### Auth
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/auth/signup` | No | Register a new user |
+| POST | `/auth/login` | No | Login and get JWT token |
+| GET | `/auth/me` | Bearer token | Get current user info |
+
+### Verification
+
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| POST | `/verification/submit` | Bearer token | Submit verification request |
+| GET | `/verification/status` | Bearer token | Check verification status |
+| POST | `/verification/review` | No (admin) | Approve or reject a request |
+| GET | `/verification/requests` | No (admin) | List all requests (optional ?status= filter) |
+
+---
+
+## Request/Response Examples
+
 ### POST /auth/signup
-
-Register a new user.
-
-**Request:**
 ```bash
 curl -X POST http://localhost:8080/auth/signup \
   -H "Content-Type: application/json" \
-  -d '{
-    "email": "test@example.com",
-    "password": "password123"
-  }'
+  -d '{"email": "alice@test.com", "password": "password123"}'
 ```
-
-**Response (200):**
+Response: `201`
 ```
-User created
+User registered successfully
 ```
-
-**Response (400) — duplicate email:**
-```
-Email already exists
-```
-
----
 
 ### POST /auth/login
-
-Login and receive a JWT token.
-
-**Request:**
 ```bash
 curl -X POST http://localhost:8080/auth/login \
   -H "Content-Type: application/json" \
-  -d '{
-    "email": "test@example.com",
-    "password": "password123"
-  }'
+  -d '{"email": "alice@test.com", "password": "password123"}'
 ```
-
-**Response (200):**
+Response: `200`
 ```json
 {
-  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  "accessToken": "eyJhbGciOiJIUzM4NCJ9..."
 }
 ```
-
-**Response (401) — invalid credentials:**
-```json
-{
-  "status": 401,
-  "error": "Unauthorized",
-  "message": "Invalid email or password"
-}
-```
-
----
 
 ### GET /auth/me
-
-Get the current user's info. Requires a valid JWT token.
-
-**Request:**
 ```bash
 curl -X GET http://localhost:8080/auth/me \
-  -H "Authorization: Bearer <accessToken>"
+  -H "Authorization: Bearer <token>"
 ```
-
-**Response (200):**
+Response: `200`
 ```json
 {
-  "userId": "7082ca1d-19ae-49c5-b4b4-d6c6427d3515",
-  "email": "test@example.com",
+  "userId": "550e8400-e29b-...",
+  "email": "alice@test.com",
   "isVerified": false,
   "verificationLevel": "NONE"
 }
 ```
 
-**Response (403) — no token or invalid token:**
+### POST /verification/submit
+```bash
+curl -X POST http://localhost:8080/verification/submit \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"documentUrl": "s3://fake-bucket/alice-id-card.png"}'
 ```
-403 Forbidden
+Response: `200`
+```json
+{
+  "requestId": "uuid",
+  "status": "PENDING"
+}
+```
+
+### GET /verification/status
+```bash
+curl -X GET http://localhost:8080/verification/status \
+  -H "Authorization: Bearer <token>"
+```
+Response: `200`
+```json
+{
+  "verificationLevel": "PENDING",
+  "latestRequest": {
+    "requestId": "uuid",
+    "status": "PENDING",
+    "documentUrl": "s3://fake-bucket/alice-id-card.png",
+    "createdAt": "2026-04-02T17:15:54Z"
+  }
+}
+```
+
+### POST /verification/review
+```bash
+curl -X POST http://localhost:8080/verification/review \
+  -H "Content-Type: application/json" \
+  -d '{"requestId": "uuid", "decision": "APPROVED", "reviewNotes": "Document looks valid"}'
+```
+Response: `200`
+```json
+{
+  "requestId": "uuid",
+  "status": "APPROVED",
+  "userVerificationLevel": "VERIFIED"
+}
+```
+
+### GET /verification/requests
+```bash
+curl -X GET http://localhost:8080/verification/requests
+curl -X GET http://localhost:8080/verification/requests?status=PENDING
+```
+Response: `200`
+```json
+[
+  {
+    "requestId": "uuid",
+    "userId": "uuid",
+    "status": "PENDING",
+    "documentUrl": "s3://fake-bucket/alice-id-card.png",
+    "createdAt": "2026-04-02T17:15:54Z",
+    "reviewedAt": null
+  }
+]
 ```
 
 ---
 
-## Seed Test Flow
+## Error Responses
 
-Follow this exact sequence to test the full authentication flow:
+| Status | Meaning | Example |
+|--------|---------|---------|
+| 400 | Bad Request | Missing or invalid input |
+| 401 | Unauthorized | Invalid email or password |
+| 403 | Forbidden | Missing or invalid JWT token |
+| 404 | Not Found | User or request not found |
+| 409 | Conflict | Duplicate email, already pending/verified |
 
-### Step 1: Register a new user
+---
 
+## Verification State Machine
+
+```
+┌──────────┐
+│   NONE   │ ← user just registered
+└────┬─────┘
+     │ submit verification
+     ▼
+┌──────────┐
+│ PENDING  │ ← waiting for admin review
+└────┬─────┘
+     │
+     ├── admin approves ──────► ┌──────────┐
+     │                          │ VERIFIED  │ ← isVerified = true
+     │                          └──────────┘
+     │                              ✗ cannot submit again
+     │
+     └── admin rejects ───────► ┌──────────┐
+                                │ REJECTED  │ ← isVerified = false
+                                └────┬──────┘
+                                     │ can resubmit
+                                     ▼
+                                ┌──────────┐
+                                │ PENDING  │ ← new request created
+                                └──────────┘
+```
+
+### Transition Rules
+- `NONE → PENDING` ✅ user submits verification
+- `PENDING → VERIFIED` ✅ admin approves
+- `PENDING → REJECTED` ✅ admin rejects
+- `REJECTED → PENDING` ✅ user resubmits
+- `VERIFIED → submit` ❌ blocked
+- `PENDING → submit` ❌ blocked (must wait for review)
+
+---
+
+## Audit Log
+
+The following actions are recorded in the `audit_logs` table:
+
+| Action | Trigger |
+|--------|---------|
+| `user_registered` | User signs up |
+| `login_success` | Successful login |
+| `login_failed` | Failed login (wrong email or password) |
+| `verification_submitted` | User submits verification |
+| `verification_approved` | Admin approves request |
+| `verification_rejected` | Admin rejects request |
+
+---
+
+## Database Tables
+
+| Table | Description |
+|-------|-------------|
+| `users` | User accounts (email, password hash) |
+| `user_profile` | Profile info and verification level |
+| `verification_requests` | Verification submission history |
+| `audit_logs` | Action audit trail |
+
+---
+
+## Demo Test Flow
+
+See [TEST_SCRIPT.md](TEST_SCRIPT.md) for the complete end-to-end test sequence.
+
+### Quick test:
 ```bash
+# 1. Register
 curl -X POST http://localhost:8080/auth/signup \
   -H "Content-Type: application/json" \
-  -d '{
-    "email": "seed@example.com",
-    "password": "password123"
-  }'
-```
+  -d '{"email": "demo@test.com", "password": "password123"}'
 
-Expected: `User created`
-
-### Step 2: Login to get a token
-
-```bash
+# 2. Login
 curl -X POST http://localhost:8080/auth/login \
   -H "Content-Type: application/json" \
-  -d '{
-    "email": "seed@example.com",
-    "password": "password123"
-  }'
-```
+  -d '{"email": "demo@test.com", "password": "password123"}'
 
-Expected: `{"accessToken":"eyJhbG..."}`
+# 3. Copy accessToken, submit verification
+curl -X POST http://localhost:8080/verification/submit \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"documentUrl": "s3://fake-bucket/demo-id.png"}'
 
-### Step 3: Copy the token
+# 4. Admin approves
+curl -X POST http://localhost:8080/verification/review \
+  -H "Content-Type: application/json" \
+  -d '{"requestId": "<requestId>", "decision": "APPROVED", "reviewNotes": "Valid"}'
 
-Copy the `accessToken` value from the login response.
-
-### Step 4: Access the protected endpoint
-
-```bash
+# 5. Confirm verified
 curl -X GET http://localhost:8080/auth/me \
-  -H "Authorization: Bearer <paste accessToken here>"
+  -H "Authorization: Bearer <token>"
 ```
-
-Expected:
-```json
-{
-  "userId": "...",
-  "email": "seed@example.com",
-  "isVerified": false,
-  "verificationLevel": "NONE"
-}
-```
-
-### Verify in the database
-
-```bash
-psql -U <your_username> -d authdb -c "SELECT * FROM users;"
-psql -U <your_username> -d authdb -c "SELECT * FROM user_profile;"
-psql -U <your_username> -d authdb -c "SELECT * FROM audit_log;"
-```
-
-You should see matching rows in all three tables.

@@ -4,7 +4,6 @@ import com.trustplatform.auth.dto.AuthResponse;
 import com.trustplatform.auth.dto.LoginRequest;
 import com.trustplatform.auth.dto.SignupRequest;
 import com.trustplatform.auth.dto.UserResponse;
-import com.trustplatform.auth.dto.SubmitVerificationRequest;
 import com.trustplatform.auth.entity.User;
 import com.trustplatform.auth.entity.UserProfile;
 import com.trustplatform.auth.entity.VerificationLevel;
