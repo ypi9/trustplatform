@@ -44,14 +44,16 @@ public class VerificationService {
     private final UserProfileRepository userProfileRepository;
     private final VerificationRequestRepository verificationRequestRepository;
     private final AuditLogService auditLogService;
+    private final FileService fileService;
 
     public VerificationService(UserRepository userRepository, UserProfileRepository userProfileRepository,
                                VerificationRequestRepository verificationRequestRepository,
-                               AuditLogService auditLogService) {
+                               AuditLogService auditLogService, FileService fileService) {
         this.userRepository = userRepository;
         this.userProfileRepository = userProfileRepository;
         this.verificationRequestRepository = verificationRequestRepository;
         this.auditLogService = auditLogService;
+        this.fileService = fileService;
     }
 
     // ──────────────────────────────────────────────
@@ -60,8 +62,15 @@ public class VerificationService {
     @Transactional
     public SubmitVerificationResponse submit(String email, SubmitVerificationRequest request) {
         // Validate input
-        if (request.getDocumentUrl() == null || request.getDocumentUrl().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "documentUrl is required");
+        String fileUrl = request.getFileUrl();
+        if (fileUrl == null || fileUrl.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "fileUrl is required");
+        }
+
+        // Validate file exists on disk
+        if (!fileService.fileExists(fileUrl)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "File not found. Please upload a file first via POST /files/upload");
         }
 
         // Load user
@@ -89,7 +98,7 @@ public class VerificationService {
         // Create new VerificationRequest
         VerificationRequest verificationRequest = new VerificationRequest();
         verificationRequest.setUserId(user.getId());
-        verificationRequest.setDocumentUrl(request.getDocumentUrl());
+        verificationRequest.setDocumentUrl(fileUrl);
         verificationRequest.setStatus(VerificationStatus.PENDING);
         verificationRequestRepository.save(verificationRequest);
 
@@ -100,11 +109,12 @@ public class VerificationService {
         // Audit log
         auditLogService.log("verification_submitted", user.getId(),
                 "{\"requestId\":\"" + verificationRequest.getId()
-                + "\",\"documentUrl\":\"" + request.getDocumentUrl() + "\"}");
+                + "\",\"documentUrl\":\"" + fileUrl + "\"}");
 
         return new SubmitVerificationResponse(
                 verificationRequest.getId().toString(),
-                verificationRequest.getStatus().name()
+                verificationRequest.getStatus().name(),
+                fileUrl
         );
     }
 

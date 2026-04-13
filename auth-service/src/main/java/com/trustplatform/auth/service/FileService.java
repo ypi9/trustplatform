@@ -101,6 +101,21 @@ public class FileService {
     }
 
     /**
+     * Checks whether a previously uploaded file exists on disk.
+     *
+     * @param fileUrl the relative URL returned by storeFile, e.g. "/uploads/uuid.png"
+     * @return true if the file exists and is a regular file
+     */
+    public boolean fileExists(String fileUrl) {
+        if (fileUrl == null || !fileUrl.startsWith("/uploads/")) {
+            return false;
+        }
+        String filename = fileUrl.substring("/uploads/".length());
+        Path filePath = uploadPath.resolve(filename).normalize();
+        return filePath.startsWith(uploadPath) && Files.exists(filePath) && Files.isRegularFile(filePath);
+    }
+
+    /**
      * Extracts the file extension (including the dot) from the original filename.
      * Returns empty string if no extension found.
      */

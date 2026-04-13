@@ -5,6 +5,6 @@ import lombok.Data;
 
 @Data
 public class SubmitVerificationRequest {
-    @NotBlank(message = "documentUrl is required")
-    private String documentUrl;
+    @NotBlank(message = "fileUrl is required")
+    private String fileUrl;
 }

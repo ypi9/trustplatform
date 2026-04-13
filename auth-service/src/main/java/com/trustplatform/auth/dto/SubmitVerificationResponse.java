@@ -8,4 +8,5 @@ import lombok.Data;
 public class SubmitVerificationResponse {
     private String requestId;
     private String status;
+    private String documentUrl;
 }

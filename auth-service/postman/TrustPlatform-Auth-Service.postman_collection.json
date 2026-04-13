@@ -16,8 +16,8 @@
       "type": "string"
     },
     {
-      "key": "documentUrl",
-      "value": "https://example.com/kyc/id-card.png",
+      "key": "fileUrl",
+      "value": "/uploads/your-uploaded-file.png",
       "type": "string"
     }
   ],
@@ -150,7 +150,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"documentUrl\": \"{{documentUrl}}\"\n}"
+              "raw": "{\n  \"fileUrl\": \"{{fileUrl}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/verification/submit",
@@ -178,7 +178,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"documentUrl\": \"\"\n}"
+              "raw": "{\n  \"fileUrl\": \"\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/verification/submit",
@@ -206,7 +206,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"documentUrl\": \"{{documentUrl}}\"\n}"
+              "raw": "{\n  \"fileUrl\": \"{{fileUrl}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/verification/submit",
