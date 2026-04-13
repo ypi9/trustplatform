@@ -24,9 +24,15 @@ public class User {
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
+    @Column(nullable = false)
+    private String role;
+
     @PrePersist
     public void prePersist() {
         this.id = UUID.randomUUID();
         this.createdAt = Instant.now();
+        if (this.role == null) {
+            this.role = "USER";
+        }
     }
 }

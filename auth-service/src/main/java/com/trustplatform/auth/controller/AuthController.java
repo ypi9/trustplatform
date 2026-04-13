@@ -49,6 +49,7 @@ public class AuthController {
         User user = new User();
         user.setEmail(request.getEmail());
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+        user.setRole("USER");
         userRepository.save(user);
 
         // Create UserProfile with defaults
