@@ -5,5 +5,8 @@
 *.iws
 *.ipr
 
+# Uploaded files
+uploads/
+
 # macOS
 .DS_Store
