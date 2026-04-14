@@ -9,4 +9,6 @@ public class ReviewVerificationResponse {
     private String requestId;
     private String status;
     private String userVerificationLevel;
+    private String reviewNotes;
+    private String reviewedAt;
 }

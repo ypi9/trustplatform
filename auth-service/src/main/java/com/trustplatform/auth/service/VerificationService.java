@@ -217,7 +217,9 @@ public class VerificationService {
         return new ReviewVerificationResponse(
                 requestId.toString(),
                 decision.name(),
-                profile.getVerificationLevel().name()
+                profile.getVerificationLevel().name(),
+                verificationRequest.getReviewNotes(),
+                verificationRequest.getReviewedAt().toString()
         );
     }
 
