@@ -4,66 +4,27 @@ import com.trustplatform.auth.dto.AuthResponse;
 import com.trustplatform.auth.dto.LoginRequest;
 import com.trustplatform.auth.dto.SignupRequest;
 import com.trustplatform.auth.dto.UserResponse;
-import com.trustplatform.auth.entity.User;
-import com.trustplatform.auth.entity.UserProfile;
-import com.trustplatform.auth.entity.VerificationLevel;
-import com.trustplatform.auth.repository.UserProfileRepository;
-import com.trustplatform.auth.repository.UserRepository;
 import com.trustplatform.auth.service.AuthService;
-import com.trustplatform.auth.service.AuditLogService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-
 
 @RestController
 @RequestMapping("/auth")
 public class AuthController {
 
-    private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
     private final AuthService authService;
-    private final UserProfileRepository userProfileRepository;
-    private final AuditLogService auditLogService;
 
-    public AuthController(UserRepository userRepository, PasswordEncoder passwordEncoder, AuthService authService, UserProfileRepository userProfileRepository, AuditLogService auditLogService) {
-        this.userRepository = userRepository;
-        this.passwordEncoder = passwordEncoder;
+    public AuthController(AuthService authService) {
         this.authService = authService;
-        this.userProfileRepository = userProfileRepository;
-        this.auditLogService = auditLogService;
     }
 
     @PostMapping("/signup")
     public ResponseEntity<String> signup(@Valid @RequestBody SignupRequest request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
-            return ResponseEntity.badRequest().body("Email already exists");
-        }
-
-        User user = new User();
-        user.setEmail(request.getEmail());
-        user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
-        user.setRole("USER");
-        userRepository.save(user);
-
-        // Create UserProfile with defaults
-        UserProfile profile = new UserProfile();
-        profile.setUserId(user.getId());
-        profile.setFullName("");
-        profile.setPhone("");
-        profile.setVerified(false);
-        profile.setVerificationLevel(VerificationLevel.NONE);
-        userProfileRepository.save(profile);
-
-        auditLogService.log("user_registered", user.getId(), "{\"email\":\"" + user.getEmail() + "\"}");
-
-        return ResponseEntity.ok("User created");
+        String message = authService.signup(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(message);
     }
 
     @PostMapping("/login")
@@ -74,21 +35,7 @@ public class AuthController {
 
     @GetMapping("/me")
     public ResponseEntity<UserResponse> me(Authentication authentication) {
-        String email = authentication.getName();
-
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
-
-        UserProfile profile = userProfileRepository.findById(user.getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Profile not found"));
-
-        UserResponse response = new UserResponse(
-                user.getId().toString(),
-                user.getEmail(),
-                profile.isVerified(),
-                profile.getVerificationLevel().name()
-        );
-
+        UserResponse response = authService.getProfile(authentication.getName());
         return ResponseEntity.ok(response);
     }
 }

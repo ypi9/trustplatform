@@ -2,60 +2,98 @@ package com.trustplatform.auth.service;
 
 import com.trustplatform.auth.dto.AuthResponse;
 import com.trustplatform.auth.dto.LoginRequest;
+import com.trustplatform.auth.dto.SignupRequest;
+import com.trustplatform.auth.dto.UserResponse;
 import com.trustplatform.auth.entity.User;
+import com.trustplatform.auth.entity.UserProfile;
+import com.trustplatform.auth.entity.VerificationLevel;
+import com.trustplatform.auth.repository.UserProfileRepository;
 import com.trustplatform.auth.repository.UserRepository;
 import com.trustplatform.auth.security.JwtService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class AuthService {
 
     private final UserRepository userRepository;
+    private final UserProfileRepository userProfileRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuditLogService auditLogService;
 
-    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder, JwtService jwtService, AuditLogService auditLogService) {
+    public AuthService(UserRepository userRepository, UserProfileRepository userProfileRepository,
+                       PasswordEncoder passwordEncoder, JwtService jwtService, AuditLogService auditLogService) {
         this.userRepository = userRepository;
+        this.userProfileRepository = userProfileRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.auditLogService = auditLogService;
     }
 
+    @Transactional
+    public String signup(SignupRequest request) {
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email already exists");
+        }
+
+        User user = new User();
+        user.setEmail(request.getEmail());
+        user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+        user.setRole("USER");
+        userRepository.save(user);
+
+        UserProfile profile = new UserProfile();
+        profile.setUserId(user.getId());
+        profile.setFullName("");
+        profile.setPhone("");
+        profile.setVerified(false);
+        profile.setVerificationLevel(VerificationLevel.NONE);
+        userProfileRepository.save(profile);
+
+        auditLogService.log("user_registered", user.getId(),
+                "{\"email\":\"" + user.getEmail() + "\"}");
+
+        return "User created";
+    }
+
     public AuthResponse login(LoginRequest request) {
-    User user = userRepository.findByEmail(request.getEmail()).orElse(null);
+        User user = userRepository.findByEmail(request.getEmail()).orElse(null);
 
-    // Case 1: user not found
-    if (user == null) {
-        auditLogService.log(
-                "login_failed",
-                null,
-                "{\"email\":\"" + request.getEmail() + "\", \"reason\":\"user_not_found\"}"
-        );
-        throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
+        if (user == null) {
+            auditLogService.log("login_failed", null,
+                    "{\"email\":\"" + request.getEmail() + "\", \"reason\":\"user_not_found\"}");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
+        }
+
+        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+            auditLogService.log("login_failed", user.getId(),
+                    "{\"email\":\"" + request.getEmail() + "\", \"reason\":\"wrong_password\"}");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
+        }
+
+        auditLogService.log("login_success", user.getId(),
+                "{\"email\":\"" + request.getEmail() + "\"}");
+
+        String token = jwtService.generateToken(user);
+        return new AuthResponse(token);
     }
 
-    // Case 2: password mismatch
-    if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-        auditLogService.log(
-                "login_failed",
-                user.getId(),
-                "{\"email\":\"" + request.getEmail() + "\", \"reason\":\"wrong_password\"}"
+    public UserResponse getProfile(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        UserProfile profile = userProfileRepository.findById(user.getId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Profile not found"));
+
+        return new UserResponse(
+                user.getId().toString(),
+                user.getEmail(),
+                profile.isVerified(),
+                profile.getVerificationLevel().name()
         );
-        throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
-    }
-
-    // Success
-    auditLogService.log(
-            "login_success",
-            user.getId(),
-            "{\"email\":\"" + request.getEmail() + "\"}"
-    );
-
-    String token = jwtService.generateToken(user);
-    return new AuthResponse(token);
     }
 }

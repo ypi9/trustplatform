@@ -17,24 +17,27 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    // ── Helper to build a consistent error body ──
+    private Map<String, Object> buildError(HttpStatus status, String message) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("timestamp", Instant.now().toString());
+        body.put("status", status.value());
+        body.put("error", status.getReasonPhrase());
+        body.put("message", message);
+        return body;
+    }
+
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<Map<String, Object>> handleAccessDenied(AccessDeniedException ex) {
-        Map<String, Object> response = new HashMap<>();
-        response.put("status", HttpStatus.FORBIDDEN.value());
-        response.put("error", "Admin access required");
-        response.put("timestamp", Instant.now().toString());
-
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(buildError(HttpStatus.FORBIDDEN, "Admin access required"));
     }
 
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<Map<String, Object>> handleResponseStatusException(ResponseStatusException ex) {
-        Map<String, Object> response = new HashMap<>();
-        response.put("status", ex.getStatusCode().value());
-        response.put("error", ex.getReason());
-        response.put("timestamp", Instant.now().toString());
-
-        return ResponseEntity.status(ex.getStatusCode()).body(response);
+        HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
+        return ResponseEntity.status(status)
+                .body(buildError(status, ex.getReason()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -44,13 +47,9 @@ public class GlobalExceptionHandler {
             fieldErrors.put(error.getField(), error.getDefaultMessage())
         );
 
-        Map<String, Object> response = new HashMap<>();
-        response.put("status", HttpStatus.BAD_REQUEST.value());
-        response.put("error", "Validation failed");
-        response.put("fields", fieldErrors);
-        response.put("timestamp", Instant.now().toString());
-
-        return ResponseEntity.badRequest().body(response);
+        Map<String, Object> body = buildError(HttpStatus.BAD_REQUEST, "Validation failed");
+        body.put("fields", fieldErrors);
+        return ResponseEntity.badRequest().body(body);
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
@@ -68,31 +67,19 @@ public class GlobalExceptionHandler {
             }
         }
 
-        Map<String, Object> response = new HashMap<>();
-        response.put("status", HttpStatus.CONFLICT.value());
-        response.put("error", message);
-        response.put("timestamp", Instant.now().toString());
-
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(buildError(HttpStatus.CONFLICT, message));
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<Map<String, Object>> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException ex) {
-        Map<String, Object> response = new HashMap<>();
-        response.put("status", HttpStatus.BAD_REQUEST.value());
-        response.put("error", "File size exceeds the 5 MB limit");
-        response.put("timestamp", Instant.now().toString());
-
-        return ResponseEntity.badRequest().body(response);
+        return ResponseEntity.badRequest()
+                .body(buildError(HttpStatus.BAD_REQUEST, "File size exceeds the 5 MB limit"));
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGenericError(Exception ex) {
-        Map<String, Object> response = new HashMap<>();
-        response.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
-        response.put("error", "An unexpected error occurred");
-        response.put("timestamp", Instant.now().toString());
-
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(buildError(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred"));
     }
 }

@@ -1,5 +1,6 @@
 package com.trustplatform.auth.service;
 
+import com.trustplatform.auth.repository.UserRepository;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -38,6 +39,14 @@ public class FileService {
 
     private Path uploadPath;
 
+    private final AuditLogService auditLogService;
+    private final UserRepository userRepository;
+
+    public FileService(AuditLogService auditLogService, UserRepository userRepository) {
+        this.auditLogService = auditLogService;
+        this.userRepository = userRepository;
+    }
+
     /**
      * Creates the upload directory on startup if it doesn't exist.
      */
@@ -54,11 +63,12 @@ public class FileService {
     /**
      * Validates and stores an uploaded file.
      *
-     * @param file the multipart file from the request
+     * @param file  the multipart file from the request
+     * @param email the authenticated user's email (for audit logging)
      * @return the relative URL path to the stored file, e.g. "/uploads/uuid-filename.png"
      * @throws ResponseStatusException 400 if file is empty, type not allowed, or size exceeded
      */
-    public String storeFile(MultipartFile file) {
+    public String storeFile(MultipartFile file, String email) {
         // 1. Empty check
         if (file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File is empty");
@@ -97,7 +107,17 @@ public class FileService {
                 "Could not store file. Please try again.");
         }
 
-        return "/uploads/" + storedFilename;
+        String fileUrl = "/uploads/" + storedFilename;
+
+        // Audit log
+        var user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        auditLogService.log("file_uploaded", user.getId(),
+                "{\"fileUrl\":\"" + fileUrl
+                + "\",\"originalName\":\"" + file.getOriginalFilename()
+                + "\",\"size\":" + file.getSize() + "}");
+
+        return fileUrl;
     }
 
     /**
