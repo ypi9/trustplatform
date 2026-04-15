@@ -7,6 +7,8 @@ A JWT-based authentication and identity verification service built with Spring B
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
+- [Environment Variables](#environment-variables)
+- [AWS Setup](#aws-setup)
 - [Database Setup](#database-setup)
 - [Run the App](#run-the-app)
 - [Run Tests](#run-tests)
@@ -30,6 +32,58 @@ A JWT-based authentication and identity verification service built with Spring B
 | Java | 21+ |
 | PostgreSQL | 15+ |
 | Maven | 3.9+ (or use the included `mvnw` wrapper) |
+| AWS CLI | 2.x (for local S3 access) |
+
+## Environment Variables
+
+All secrets and environment-specific values are externalized. Copy the template and fill in your values:
+
+```bash
+cp .env.example .env
+# Edit .env with your values
+```
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DB_HOST` | `localhost` | PostgreSQL host |
+| `DB_PORT` | `5432` | PostgreSQL port |
+| `DB_NAME` | `authdb` | Database name |
+| `DB_USERNAME` | `yixupi` | Database user |
+| `DB_PASSWORD` | *(empty)* | Database password |
+| `JWT_SECRET` | *(dev key)* | HMAC signing key (256-bit+) |
+| `JWT_EXPIRATION` | `3600000` | Token TTL in ms (1 hour) |
+| `AWS_REGION` | `us-west-1` | AWS region |
+| `AWS_S3_BUCKET` | `trustplatform-uploads-1` | S3 bucket name |
+| `FILE_UPLOAD_DIR` | `uploads` | Local file upload directory |
+
+Export them in your shell, or use a `.env` loader. The `.env` file is gitignored.
+
+## AWS Setup
+
+The service uses **AWS S3** for document storage (upcoming migration from local disk). The S3 bucket should be **private** (no public access).
+
+### Local development — configure credentials
+
+The app uses the [Default Credential Provider Chain](https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials-chain.html), so any of these work:
+
+**Option A: AWS CLI profile (recommended)**
+```bash
+aws configure
+# Enter your Access Key ID, Secret Access Key, region (us-west-1)
+# This stores credentials in ~/.aws/credentials
+```
+
+**Option B: Environment variables**
+```bash
+export AWS_ACCESS_KEY_ID=AKIAxxxxxxxxxxxxxxxx
+export AWS_SECRET_ACCESS_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+export AWS_REGION=us-west-1
+```
+
+### Verify access
+```bash
+aws s3 ls s3://trustplatform-uploads-1/
+```
 
 ## Database Setup
 
