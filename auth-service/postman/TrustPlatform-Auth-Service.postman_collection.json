@@ -167,7 +167,7 @@
           "response": []
         },
         {
-          "name": "Submit Verification (missing documentUrl -> 400)",
+          "name": "Submit Verification (missing fileUrl -> 400)",
           "request": {
             "auth": { "type": "noauth" },
             "method": "POST",
