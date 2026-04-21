@@ -2,6 +2,7 @@ package com.trustplatform.auth.controller;
 
 import com.trustplatform.auth.dto.FileUploadResponse;
 import com.trustplatform.auth.service.FileService;
+import com.trustplatform.auth.storage.dto.S3UploadResult;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -14,7 +15,7 @@ import org.springframework.web.multipart.MultipartFile;
  * POST /files/upload — upload a file (requires Bearer token)
  *   Content-Type: multipart/form-data
  *   Form field: "file"
- *   Returns: { "fileUrl": "/uploads/uuid-filename.ext" }
+ *   Returns S3 object metadata, with fileUrl kept as the object key for compatibility.
  */
 @RestController
 @RequestMapping("/files")
@@ -31,7 +32,7 @@ public class FileController {
             Authentication authentication,
             @RequestParam("file") MultipartFile file
     ) {
-        String fileUrl = fileService.storeFile(file, authentication.getName());
-        return ResponseEntity.ok(new FileUploadResponse(fileUrl));
+        S3UploadResult uploadResult = fileService.storeFile(file, authentication.getName());
+        return ResponseEntity.ok(FileUploadResponse.from(uploadResult));
     }
 }

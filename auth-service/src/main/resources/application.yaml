@@ -20,11 +20,8 @@ spring:
       max-file-size: 5MB
       max-request-size: 5MB
 
-file:
-  upload-dir: ${FILE_UPLOAD_DIR:uploads}
-
 jwt:
-  secret: ${JWT_SECRET:m3F8kP2xR7vQ9wL5tY1nJ6hB4dA0sG8cU3eI7oK2pN5rT9yW1xZ4bV6fH0jM3qE}
+  secret: ${JWT_SECRET:change-me-dev-jwt-secret-that-is-at-least-32-bytes-long}
   expiration: ${JWT_EXPIRATION:3600000}
 
 aws:
