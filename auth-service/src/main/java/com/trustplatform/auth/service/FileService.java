@@ -62,4 +62,8 @@ public class FileService {
     public boolean fileExists(String fileUrl) {
         return s3StorageService.objectExists(fileUrl);
     }
+
+    public S3UploadResult getFileMetadata(String documentKey) {
+        return s3StorageService.getObjectMetadata(documentKey);
+    }
 }

@@ -13,6 +13,7 @@ import com.trustplatform.auth.entity.VerificationStatus;
 import com.trustplatform.auth.repository.UserProfileRepository;
 import com.trustplatform.auth.repository.UserRepository;
 import com.trustplatform.auth.repository.VerificationRequestRepository;
+import com.trustplatform.auth.storage.dto.S3UploadResult;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,16 +63,16 @@ public class VerificationService {
     @Transactional
     public SubmitVerificationResponse submit(String email, SubmitVerificationRequest request) {
         // Validate input
-        String fileUrl = request.getFileUrl();
-        if (fileUrl == null || fileUrl.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "fileUrl is required");
+        String documentKey = request.getDocumentKey();
+        if (documentKey == null || documentKey.isBlank()) {
+            documentKey = request.getFileUrl();
         }
 
-        // Validate file exists on disk
-        if (!fileService.fileExists(fileUrl)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "File not found. Please upload a file first via POST /files/upload");
+        if (documentKey == null || documentKey.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "documentKey is required");
         }
+
+        S3UploadResult document = fileService.getFileMetadata(documentKey);
 
         // Load user
         var user = userRepository.findByEmail(email)
@@ -98,7 +99,11 @@ public class VerificationService {
         // Create new VerificationRequest
         VerificationRequest verificationRequest = new VerificationRequest();
         verificationRequest.setUserId(user.getId());
-        verificationRequest.setDocumentUrl(fileUrl);
+        verificationRequest.setDocumentKey(document.getObjectKey());
+        verificationRequest.setDocumentOriginalName(document.getOriginalFilename());
+        verificationRequest.setDocumentContentType(document.getContentType());
+        verificationRequest.setDocumentSize(document.getSize());
+        verificationRequest.setDocumentUrl(document.getObjectKey());
         verificationRequest.setStatus(VerificationStatus.PENDING);
         verificationRequestRepository.save(verificationRequest);
 
@@ -109,12 +114,19 @@ public class VerificationService {
         // Audit log
         auditLogService.log("verification_submitted", user.getId(),
                 "{\"requestId\":\"" + verificationRequest.getId()
-                + "\",\"documentUrl\":\"" + fileUrl + "\"}");
+                + "\",\"documentKey\":\"" + document.getObjectKey()
+                + "\",\"documentOriginalName\":\"" + document.getOriginalFilename()
+                + "\",\"documentContentType\":\"" + document.getContentType()
+                + "\",\"documentSize\":" + document.getSize() + "}");
 
         return new SubmitVerificationResponse(
                 verificationRequest.getId().toString(),
                 verificationRequest.getStatus().name(),
-                fileUrl
+                verificationRequest.getDocumentKey(),
+                verificationRequest.getDocumentOriginalName(),
+                verificationRequest.getDocumentContentType(),
+                verificationRequest.getDocumentSize(),
+                verificationRequest.getDocumentUrl()
         );
     }
 
@@ -136,6 +148,10 @@ public class VerificationService {
             latestRequest = new VerificationStatusResponse.LatestRequest(
                     req.getId().toString(),
                     req.getStatus().name(),
+                    req.getDocumentKey(),
+                    req.getDocumentOriginalName(),
+                    req.getDocumentContentType(),
+                    req.getDocumentSize(),
                     req.getDocumentUrl(),
                     req.getCreatedAt().toString()
             );
@@ -246,6 +262,10 @@ public class VerificationService {
                 req.getId().toString(),
                 req.getUserId().toString(),
                 req.getStatus().name(),
+                req.getDocumentKey(),
+                req.getDocumentOriginalName(),
+                req.getDocumentContentType(),
+                req.getDocumentSize(),
                 req.getDocumentUrl(),
                 req.getCreatedAt().toString(),
                 req.getReviewedAt() != null ? req.getReviewedAt().toString() : null

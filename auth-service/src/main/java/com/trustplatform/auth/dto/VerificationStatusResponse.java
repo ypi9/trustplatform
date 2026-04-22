@@ -14,6 +14,10 @@ public class VerificationStatusResponse {
     public static class LatestRequest {
         private String requestId;
         private String status;
+        private String documentKey;
+        private String documentOriginalName;
+        private String documentContentType;
+        private Long documentSize;
         private String documentUrl;
         private String createdAt;
     }

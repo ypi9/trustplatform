@@ -120,6 +120,43 @@ public class S3StorageService {
         }
     }
 
+    /**
+     * Reads trusted object metadata from S3.
+     */
+    public S3UploadResult getObjectMetadata(String objectKey) {
+        String normalizedKey = normalizeObjectKey(objectKey);
+        if (normalizedKey == null || normalizedKey.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "documentKey is required");
+        }
+
+        try {
+            HeadObjectResponse response = s3Client.headObject(HeadObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(normalizedKey)
+                    .build());
+
+            return S3UploadResult.builder()
+                    .bucket(bucketName)
+                    .objectKey(normalizedKey)
+                    .originalFilename(response.metadata().get("original-filename"))
+                    .contentType(response.contentType())
+                    .size(response.contentLength() != null ? response.contentLength() : 0)
+                    .build();
+        } catch (NoSuchKeyException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "File not found. Please upload a file first via POST /files/upload");
+        } catch (S3Exception e) {
+            if (e.statusCode() == 404) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "File not found. Please upload a file first via POST /files/upload");
+            }
+            log.warn("S3 metadata lookup failed for bucket '{}' key '{}': {}",
+                    bucketName, normalizedKey, e.getMessage());
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Could not verify uploaded file. Please try again.");
+        }
+    }
+
     // ──────────────────────────────────────────────
     //  Bucket health / validation
     // ──────────────────────────────────────────────
@@ -283,7 +320,7 @@ public class S3StorageService {
         return filename.substring(dotIndex);
     }
 
-    private String normalizeObjectKey(String objectKey) {
+    public String normalizeObjectKey(String objectKey) {
         if (objectKey == null) {
             return null;
         }

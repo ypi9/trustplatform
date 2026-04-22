@@ -24,6 +24,11 @@
       "key": "fileUrl",
       "value": "uploads/2026/04/21/your-uploaded-object.png",
       "type": "string"
+    },
+    {
+      "key": "documentKey",
+      "value": "uploads/2026/04/21/your-uploaded-object.png",
+      "type": "string"
     }
   ],
   "item": [
@@ -155,19 +160,19 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fileUrl\": \"{{fileUrl}}\"\n}"
+              "raw": "{\n  \"documentKey\": \"{{documentKey}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/verification/submit",
               "host": ["{{baseUrl}}"],
               "path": ["verification", "submit"]
             },
-            "description": "Submit a verification request using the S3 object key returned by /files/upload in fileUrl (expects 200 with requestId + PENDING)."
+            "description": "Submit a verification request using the S3 object key returned by /files/upload in documentKey (expects 200 with requestId + PENDING)."
           },
           "response": []
         },
         {
-          "name": "Submit Verification (missing fileUrl -> 400)",
+          "name": "Submit Verification (missing documentKey -> 400)",
           "request": {
             "auth": { "type": "noauth" },
             "method": "POST",
@@ -183,14 +188,14 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fileUrl\": \"\"\n}"
+              "raw": "{\n  \"documentKey\": \"\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/verification/submit",
               "host": ["{{baseUrl}}"],
               "path": ["verification", "submit"]
             },
-            "description": "Submit without a valid S3 object key in fileUrl (expects 400 Bad Request)."
+            "description": "Submit without a valid S3 object key in documentKey (expects 400 Bad Request)."
           },
           "response": []
         },
@@ -211,7 +216,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fileUrl\": \"{{fileUrl}}\"\n}"
+              "raw": "{\n  \"documentKey\": \"{{documentKey}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/verification/submit",
@@ -432,7 +437,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["files", "upload"]
             },
-            "description": "Upload a file to S3 (PNG, JPG, or PDF, max 5 MB). Returns bucket, objectKey, originalFilename, contentType, size, and fileUrl. fileUrl is kept for compatibility and contains the S3 object key."
+            "description": "Upload a file to S3 (PNG, JPG, or PDF, max 5 MB). Returns bucket, objectKey, originalFilename, contentType, size, and fileUrl. Use objectKey as documentKey when submitting verification."
           },
           "response": [],
           "event": [
@@ -453,6 +458,7 @@
                   "",
                   "const body = pm.response.json();",
                   "if (body.objectKey) {",
+                  "  pm.collectionVariables.set(\"documentKey\", body.objectKey);",
                   "  pm.collectionVariables.set(\"fileUrl\", body.objectKey);",
                   "}"
                 ]
