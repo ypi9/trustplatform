@@ -1,14 +1,31 @@
 package com.trustplatform.auth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.trustplatform.auth.storage.dto.S3BucketInfo;
+import com.trustplatform.auth.storage.dto.S3UploadResult;
+import com.trustplatform.auth.storage.service.S3StorageService;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.net.URL;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -47,6 +64,19 @@ public class VerificationFlowIntegrationTest {
     private static final String ADMIN_EMAIL = "e2e-admin@test.com";
     private static final String USER2_EMAIL = "e2e-user2@test.com";
     private static final String PASSWORD    = "password123";
+    private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
+            "image/png",
+            "image/jpeg",
+            "application/pdf"
+    );
+    private static final long MAX_FILE_SIZE = 5 * 1024 * 1024;
+    private static final byte[] PNG_BYTES = new byte[] {
+            (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00
+    };
+    private static final byte[] JPEG_BYTES = new byte[] {
+            (byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 0x00
+    };
+    private static final byte[] PDF_BYTES = "%PDF-1.7\n".getBytes();
 
     // ── Cleanup before and after ──
 
@@ -142,13 +172,17 @@ public class VerificationFlowIntegrationTest {
     @Test @Order(11)
     void uploadFile() throws Exception {
         MockMultipartFile file = new MockMultipartFile(
-                "file", "id-card.png", "image/png", "fake-image-bytes".getBytes());
+                "file", "id-card.png", "image/png", PNG_BYTES);
 
         MvcResult result = mockMvc.perform(multipart("/files/upload")
                 .file(file)
                 .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.fileUrl").exists())
+                .andExpect(jsonPath("$.objectKey").exists())
+                .andExpect(jsonPath("$.bucket").value("test-bucket"))
+                .andExpect(jsonPath("$.contentType").value("image/png"))
+                .andExpect(jsonPath("$.size").value(PNG_BYTES.length))
                 .andReturn();
 
         fileUrl = objectMapper.readTree(result.getResponse().getContentAsString())
@@ -160,10 +194,14 @@ public class VerificationFlowIntegrationTest {
         MvcResult result = mockMvc.perform(post("/verification/submit")
                 .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"fileUrl\": \"" + fileUrl + "\"}"))
+                .content("{\"documentKey\": \"" + fileUrl + "\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.requestId").exists())
                 .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.documentKey").value(fileUrl))
+                .andExpect(jsonPath("$.documentOriginalName").value("id-card.png"))
+                .andExpect(jsonPath("$.documentContentType").value("image/png"))
+                .andExpect(jsonPath("$.documentSize").value(PNG_BYTES.length))
                 .andExpect(jsonPath("$.documentUrl").value(fileUrl))
                 .andReturn();
 
@@ -172,6 +210,20 @@ public class VerificationFlowIntegrationTest {
     }
 
     @Test @Order(13)
+    void databaseStoresS3ObjectMetadata() {
+        Map<String, Object> row = jdbcTemplate.queryForMap(
+                "SELECT document_key, document_original_name, document_content_type, document_size " +
+                        "FROM verification_requests WHERE id = ?",
+                java.util.UUID.fromString(requestId)
+        );
+
+        Assertions.assertEquals(fileUrl, row.get("document_key"));
+        Assertions.assertEquals("id-card.png", row.get("document_original_name"));
+        Assertions.assertEquals("image/png", row.get("document_content_type"));
+        Assertions.assertEquals((long) PNG_BYTES.length, ((Number) row.get("document_size")).longValue());
+    }
+
+    @Test @Order(14)
     void statusIsPendingAfterSubmit() throws Exception {
         mockMvc.perform(get("/verification/status")
                 .header("Authorization", "Bearer " + userToken))
@@ -180,23 +232,23 @@ public class VerificationFlowIntegrationTest {
                 .andExpect(jsonPath("$.latestRequest.status").value("PENDING"));
     }
 
-    @Test @Order(14)
+    @Test @Order(15)
     void duplicatePendingSubmissionBlocked() throws Exception {
         mockMvc.perform(post("/verification/submit")
                 .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"fileUrl\": \"" + fileUrl + "\"}"))
+                .content("{\"documentKey\": \"" + fileUrl + "\"}"))
                 .andExpect(status().isConflict());
     }
 
-    @Test @Order(15)
+    @Test @Order(16)
     void regularUserCannotAccessAdminListEndpoint() throws Exception {
         mockMvc.perform(get("/verification/requests")
                 .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isForbidden());
     }
 
-    @Test @Order(16)
+    @Test @Order(17)
     void regularUserCannotAccessAdminReviewEndpoint() throws Exception {
         mockMvc.perform(post("/verification/review")
                 .header("Authorization", "Bearer " + userToken)
@@ -206,16 +258,33 @@ public class VerificationFlowIntegrationTest {
                 .andExpect(status().isForbidden());
     }
 
-    @Test @Order(17)
+    @Test @Order(18)
+    void regularUserCannotGenerateDocumentLink() throws Exception {
+        mockMvc.perform(get("/verification/requests/" + requestId + "/document-link")
+                .header("Authorization", "Bearer " + userToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test @Order(19)
     void adminListsPendingRequests() throws Exception {
         mockMvc.perform(get("/verification/requests").param("status", "PENDING")
                 .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray())
-                .andExpect(jsonPath("$[?(@.requestId == '" + requestId + "')]").exists());
+                .andExpect(jsonPath("$[?(@.requestId == '" + requestId + "')]").exists())
+                .andExpect(jsonPath("$[?(@.documentKey == '" + fileUrl + "')]").exists());
     }
 
-    @Test @Order(18)
+    @Test @Order(20)
+    void adminGeneratesPresignedDocumentLink() throws Exception {
+        mockMvc.perform(get("/verification/requests/" + requestId + "/document-link")
+                .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.requestId").value(requestId))
+                .andExpect(jsonPath("$.downloadUrl").value("https://example.test/presigned/" + fileUrl));
+    }
+
+    @Test @Order(21)
     void adminApprovesRequest() throws Exception {
         mockMvc.perform(post("/verification/review")
                 .header("Authorization", "Bearer " + adminToken)
@@ -230,7 +299,7 @@ public class VerificationFlowIntegrationTest {
                 .andExpect(jsonPath("$.reviewedAt").exists());
     }
 
-    @Test @Order(19)
+    @Test @Order(22)
     void profileIsVerifiedAfterApproval() throws Exception {
         mockMvc.perform(get("/auth/me")
                 .header("Authorization", "Bearer " + userToken))
@@ -239,16 +308,16 @@ public class VerificationFlowIntegrationTest {
                 .andExpect(jsonPath("$.verificationLevel").value("VERIFIED"));
     }
 
-    @Test @Order(20)
+    @Test @Order(23)
     void verifiedUserCannotSubmitAgain() throws Exception {
         mockMvc.perform(post("/verification/submit")
                 .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"fileUrl\": \"" + fileUrl + "\"}"))
+                .content("{\"documentKey\": \"" + fileUrl + "\"}"))
                 .andExpect(status().isConflict());
     }
 
-    @Test @Order(21)
+    @Test @Order(24)
     void reviewAlreadyReviewedRequestBlocked() throws Exception {
         mockMvc.perform(post("/verification/review")
                 .header("Authorization", "Bearer " + adminToken)
@@ -286,7 +355,7 @@ public class VerificationFlowIntegrationTest {
     @Test @Order(32)
     void secondUserUploadsFile() throws Exception {
         MockMultipartFile file = new MockMultipartFile(
-                "file", "passport.pdf", "application/pdf", "fake-pdf-content".getBytes());
+                "file", "passport.pdf", "application/pdf", PDF_BYTES);
 
         MvcResult result = mockMvc.perform(multipart("/files/upload")
                 .file(file)
@@ -304,7 +373,7 @@ public class VerificationFlowIntegrationTest {
         MvcResult result = mockMvc.perform(post("/verification/submit")
                 .header("Authorization", "Bearer " + secondUserToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"fileUrl\": \"" + secondFileUrl + "\"}"))
+                .content("{\"documentKey\": \"" + secondFileUrl + "\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PENDING"))
                 .andReturn();
@@ -343,7 +412,7 @@ public class VerificationFlowIntegrationTest {
     @Test @Order(40)
     void rejectedUserUploadsNewFile() throws Exception {
         MockMultipartFile file = new MockMultipartFile(
-                "file", "passport-v2.jpg", "image/jpeg", "better-image".getBytes());
+                "file", "passport-v2.jpg", "image/jpeg", JPEG_BYTES);
 
         MvcResult result = mockMvc.perform(multipart("/files/upload")
                 .file(file)
@@ -360,7 +429,7 @@ public class VerificationFlowIntegrationTest {
         MvcResult result = mockMvc.perform(post("/verification/submit")
                 .header("Authorization", "Bearer " + secondUserToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"fileUrl\": \"" + secondFileUrl + "\"}"))
+                .content("{\"documentKey\": \"" + secondFileUrl + "\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PENDING"))
                 .andReturn();
@@ -383,7 +452,7 @@ public class VerificationFlowIntegrationTest {
     // ══════════════════════════════════════════════
 
     @Test @Order(50)
-    void submitWithMissingFileUrlReturns400() throws Exception {
+    void submitWithMissingDocumentKeyReturns400() throws Exception {
         mockMvc.perform(post("/verification/submit")
                 .header("Authorization", "Bearer " + secondUserToken)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -395,7 +464,7 @@ public class VerificationFlowIntegrationTest {
     void submitWithNoTokenReturnsForbidden() throws Exception {
         mockMvc.perform(post("/verification/submit")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"fileUrl\": \"/uploads/fake.png\"}"))
+                .content("{\"documentKey\": \"uploads/fake.png\"}"))
                 .andExpect(status().isForbidden());
     }
 
@@ -404,7 +473,7 @@ public class VerificationFlowIntegrationTest {
         mockMvc.perform(post("/verification/submit")
                 .header("Authorization", "Bearer " + secondUserToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"fileUrl\": \"/uploads/does-not-exist.png\"}"))
+                .content("{\"documentKey\": \"uploads/does-not-exist.png\"}"))
                 .andExpect(status().isBadRequest());
     }
 
@@ -422,13 +491,24 @@ public class VerificationFlowIntegrationTest {
     @Test @Order(54)
     void uploadWithNoTokenReturnsForbidden() throws Exception {
         MockMultipartFile file = new MockMultipartFile(
-                "file", "id.png", "image/png", "bytes".getBytes());
+                "file", "id.png", "image/png", PNG_BYTES);
 
         mockMvc.perform(multipart("/files/upload").file(file))
                 .andExpect(status().isForbidden());
     }
 
     @Test @Order(55)
+    void uploadOversizedFileReturns400() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "too-large.pdf", "application/pdf", new byte[(int) MAX_FILE_SIZE + 1]);
+
+        mockMvc.perform(multipart("/files/upload")
+                .file(file)
+                .header("Authorization", "Bearer " + userToken))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test @Order(56)
     void duplicateSignupReturnsConflict() throws Exception {
         mockMvc.perform(post("/auth/signup")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -436,7 +516,7 @@ public class VerificationFlowIntegrationTest {
                 .andExpect(status().isConflict());
     }
 
-    @Test @Order(56)
+    @Test @Order(57)
     void loginWithWrongPasswordReturnsUnauthorized() throws Exception {
         mockMvc.perform(post("/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -444,11 +524,117 @@ public class VerificationFlowIntegrationTest {
                 .andExpect(status().isUnauthorized());
     }
 
-    @Test @Order(57)
+    @Test @Order(58)
     void adminListsAllRequests() throws Exception {
         mockMvc.perform(get("/verification/requests")
                 .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray());
+    }
+
+    @TestConfiguration
+    static class FakeS3StorageTestConfig {
+        @Bean
+        @Primary
+        S3StorageService fakeS3StorageService() {
+            return new FakeS3StorageService();
+        }
+    }
+
+    static class FakeS3StorageService extends S3StorageService {
+        private final AtomicInteger uploadCounter = new AtomicInteger();
+        private final Map<String, S3UploadResult> uploadedObjects = new HashMap<>();
+
+        FakeS3StorageService() {
+            super(null, null, "test-bucket");
+        }
+
+        @Override
+        public S3UploadResult upload(MultipartFile file) {
+            S3UploadResult result = validateAndStoreFakeUpload(file);
+            uploadedObjects.put(result.getObjectKey(), result);
+            return result;
+        }
+
+        @Override
+        public S3UploadResult getObjectMetadata(String objectKey) {
+            S3UploadResult result = uploadedObjects.get(normalizeKey(objectKey));
+            if (result == null) {
+                throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,
+                        "File not found. Please upload a file first via POST /files/upload");
+            }
+            return result;
+        }
+
+        @Override
+        public URL generatePresignedGetUrl(String objectKey, Duration expiresIn) {
+            try {
+                return new URL("https://example.test/presigned/" + normalizeKey(objectKey));
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+        }
+
+        @Override
+        public S3BucketInfo validateBucketAccess(int maxKeys) {
+            return S3BucketInfo.builder()
+                    .bucket("test-bucket")
+                    .region("us-west-1")
+                    .accessible(true)
+                    .objectCount(uploadedObjects.size())
+                    .sampleKeys(uploadedObjects.keySet().stream().limit(maxKeys).toList())
+                    .checkedAt(Instant.now())
+                    .build();
+        }
+
+        @Override
+        public boolean isBucketPublicAccessBlocked() {
+            return true;
+        }
+
+        @Override
+        public List<String> listObjects(String prefix, int maxKeys) {
+            return uploadedObjects.keySet().stream()
+                    .filter(key -> prefix == null || prefix.isBlank() || key.startsWith(prefix))
+                    .limit(maxKeys)
+                    .toList();
+        }
+
+        private S3UploadResult validateAndStoreFakeUpload(MultipartFile file) {
+            if (file == null || file.isEmpty()) {
+                throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "File is empty");
+            }
+            if (file.getSize() > MAX_FILE_SIZE) {
+                throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,
+                        "File size exceeds the 5 MB limit");
+            }
+            String contentType = file.getContentType();
+            if (contentType == null || !ALLOWED_CONTENT_TYPES.contains(contentType)) {
+                throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,
+                        "File type not allowed. Accepted types: png, jpg, pdf");
+            }
+
+            String extension = switch (contentType) {
+                case "image/png" -> ".png";
+                case "image/jpeg" -> ".jpg";
+                case "application/pdf" -> ".pdf";
+                default -> "";
+            };
+            String objectKey = "uploads/test/object-" + uploadCounter.incrementAndGet() + extension;
+            return S3UploadResult.builder()
+                    .bucket("test-bucket")
+                    .objectKey(objectKey)
+                    .originalFilename(file.getOriginalFilename())
+                    .contentType(contentType)
+                    .size(file.getSize())
+                    .build();
+        }
+
+        private String normalizeKey(String objectKey) {
+            if (objectKey == null) {
+                return null;
+            }
+            return objectKey.startsWith("/") ? objectKey.substring(1) : objectKey;
+        }
     }
 }

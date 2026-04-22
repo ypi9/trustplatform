@@ -205,10 +205,11 @@ public class S3StorageService {
                     && Boolean.TRUE.equals(config.ignorePublicAcls())
                     && Boolean.TRUE.equals(config.blockPublicPolicy())
                     && Boolean.TRUE.equals(config.restrictPublicBuckets());
-        } catch (NoSuchPublicAccessBlockConfigurationException e) {
-            log.warn("S3 bucket '{}' does not have bucket-level Block Public Access configured", bucketName);
-            return false;
         } catch (S3Exception e) {
+            if (e.statusCode() == 404 || "NoSuchPublicAccessBlockConfiguration".equals(e.awsErrorDetails().errorCode())) {
+                log.warn("S3 bucket '{}' does not have bucket-level Block Public Access configured", bucketName);
+                return false;
+            }
             log.warn("Could not verify S3 Block Public Access for bucket '{}': {}", bucketName, e.getMessage());
             return false;
         }
