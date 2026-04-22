@@ -29,6 +29,11 @@
       "key": "documentKey",
       "value": "uploads/2026/04/21/your-uploaded-object.png",
       "type": "string"
+    },
+    {
+      "key": "verificationRequestId",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -135,6 +140,26 @@
               "path": ["auth", "me"]
             },
             "description": "Get current user info with valid token (set accessToken variable from login response)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Document Link",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/verification/requests/{{verificationRequestId}}/document-link",
+              "host": ["{{baseUrl}}"],
+              "path": ["verification", "requests", "{{verificationRequestId}}", "document-link"]
+            },
+            "description": "Generate a short-lived presigned S3 GET URL for the request document. Admin only; URL is generated on demand and not stored."
           },
           "response": []
         }

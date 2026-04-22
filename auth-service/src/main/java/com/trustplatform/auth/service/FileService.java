@@ -8,6 +8,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.net.URL;
+import java.time.Duration;
+
 /**
  * Handles file upload, validation, and storage.
  *
@@ -65,5 +68,9 @@ public class FileService {
 
     public S3UploadResult getFileMetadata(String documentKey) {
         return s3StorageService.getObjectMetadata(documentKey);
+    }
+
+    public URL generateDownloadUrl(String documentKey, Duration expiresIn) {
+        return s3StorageService.generatePresignedGetUrl(documentKey, expiresIn);
     }
 }

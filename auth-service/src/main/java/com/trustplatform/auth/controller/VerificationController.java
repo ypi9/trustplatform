@@ -3,6 +3,7 @@ package com.trustplatform.auth.controller;
 import com.trustplatform.auth.dto.ReviewVerificationRequest;
 import com.trustplatform.auth.dto.ReviewVerificationResponse;
 import com.trustplatform.auth.dto.SubmitVerificationRequest;
+import com.trustplatform.auth.dto.VerificationDocumentLinkResponse;
 import com.trustplatform.auth.dto.VerificationRequestItem;
 import com.trustplatform.auth.dto.SubmitVerificationResponse;
 import com.trustplatform.auth.dto.VerificationStatusResponse;
@@ -55,5 +56,11 @@ public class VerificationController {
     ) {
         List<VerificationRequestItem> requests = verificationService.listRequests(status);
         return ResponseEntity.ok(requests);
+    }
+
+    @GetMapping("/requests/{id}/document-link")
+    public ResponseEntity<VerificationDocumentLinkResponse> documentLink(@PathVariable String id) {
+        VerificationDocumentLinkResponse response = verificationService.generateDocumentLink(id);
+        return ResponseEntity.ok(response);
     }
 }

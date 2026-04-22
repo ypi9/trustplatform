@@ -3,6 +3,7 @@ package com.trustplatform.auth.service;
 import com.trustplatform.auth.dto.ReviewVerificationRequest;
 import com.trustplatform.auth.dto.ReviewVerificationResponse;
 import com.trustplatform.auth.dto.SubmitVerificationRequest;
+import com.trustplatform.auth.dto.VerificationDocumentLinkResponse;
 import com.trustplatform.auth.dto.VerificationRequestItem;
 import com.trustplatform.auth.dto.SubmitVerificationResponse;
 import com.trustplatform.auth.dto.VerificationStatusResponse;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -40,6 +42,8 @@ import java.util.UUID;
  */
 @Service
 public class VerificationService {
+
+    private static final Duration DOCUMENT_LINK_TTL = Duration.ofMinutes(15);
 
     private final UserRepository userRepository;
     private final UserProfileRepository userProfileRepository;
@@ -270,5 +274,28 @@ public class VerificationService {
                 req.getCreatedAt().toString(),
                 req.getReviewedAt() != null ? req.getReviewedAt().toString() : null
         )).toList();
+    }
+
+    public VerificationDocumentLinkResponse generateDocumentLink(String requestId) {
+        UUID id;
+        try {
+            id = UUID.fromString(requestId);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid requestId format");
+        }
+
+        VerificationRequest request = verificationRequestRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Verification request not found"));
+
+        String documentKey = request.getDocumentKey();
+        if (documentKey == null || documentKey.isBlank()) {
+            documentKey = request.getDocumentUrl();
+        }
+        if (documentKey == null || documentKey.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Verification request has no document key");
+        }
+
+        String downloadUrl = fileService.generateDownloadUrl(documentKey, DOCUMENT_LINK_TTL).toString();
+        return new VerificationDocumentLinkResponse(request.getId().toString(), downloadUrl);
     }
 }

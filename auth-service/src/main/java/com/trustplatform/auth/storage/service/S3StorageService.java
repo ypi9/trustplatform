@@ -12,8 +12,13 @@ import org.springframework.web.server.ResponseStatusException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
+import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
+import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 
 import java.io.IOException;
+import java.net.URL;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -39,11 +44,14 @@ public class S3StorageService {
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024;
 
     private final S3Client s3Client;
+    private final S3Presigner s3Presigner;
     private final String bucketName;
 
     public S3StorageService(S3Client s3Client,
+                            S3Presigner s3Presigner,
                             @Qualifier("s3BucketName") String bucketName) {
         this.s3Client = s3Client;
+        this.s3Presigner = s3Presigner;
         this.bucketName = bucketName;
     }
 
@@ -155,6 +163,29 @@ public class S3StorageService {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Could not verify uploaded file. Please try again.");
         }
+    }
+
+    /**
+     * Generates a short-lived GET URL for a private S3 object.
+     */
+    public URL generatePresignedGetUrl(String objectKey, Duration expiresIn) {
+        String normalizedKey = normalizeObjectKey(objectKey);
+        if (normalizedKey == null || normalizedKey.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "documentKey is required");
+        }
+
+        GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                .bucket(bucketName)
+                .key(normalizedKey)
+                .build();
+
+        GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
+                .signatureDuration(expiresIn)
+                .getObjectRequest(getObjectRequest)
+                .build();
+
+        PresignedGetObjectRequest presignedRequest = s3Presigner.presignGetObject(presignRequest);
+        return presignedRequest.url();
     }
 
     // ──────────────────────────────────────────────
