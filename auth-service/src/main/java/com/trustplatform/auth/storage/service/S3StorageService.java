@@ -17,6 +17,7 @@ import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignReques
 import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
 import java.time.Duration;
 import java.time.Instant;
@@ -42,6 +43,7 @@ public class S3StorageService {
             "application/pdf"
     );
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024;
+    private static final int MAX_ORIGINAL_FILENAME_LENGTH = 255;
 
     private final S3Client s3Client;
     private final S3Presigner s3Presigner;
@@ -66,7 +68,7 @@ public class S3StorageService {
 
         String originalFilename = cleanOriginalFilename(file.getOriginalFilename());
         String contentType = file.getContentType();
-        String objectKey = generateObjectKey(originalFilename, contentType);
+        String objectKey = generateObjectKey(contentType);
 
         PutObjectRequest request = PutObjectRequest.builder()
                 .bucket(bucketName)
@@ -90,7 +92,7 @@ public class S3StorageService {
                     "Could not store file. Please try again.");
         }
 
-        log.info("Uploaded file '{}' to s3://{}/{}", originalFilename, bucketName, objectKey);
+        log.info("Uploaded file '{}' to S3 bucket '{}' with key '{}'", originalFilename, bucketName, objectKey);
 
         return S3UploadResult.builder()
                 .bucket(bucketName)
@@ -186,6 +188,30 @@ public class S3StorageService {
 
         PresignedGetObjectRequest presignedRequest = s3Presigner.presignGetObject(presignRequest);
         return presignedRequest.url();
+    }
+
+    /**
+     * Returns true when S3 Block Public Access is enabled at the bucket level.
+     */
+    public boolean isBucketPublicAccessBlocked() {
+        try {
+            PublicAccessBlockConfiguration config = s3Client.getPublicAccessBlock(
+                    GetPublicAccessBlockRequest.builder()
+                            .bucket(bucketName)
+                            .build()
+            ).publicAccessBlockConfiguration();
+
+            return Boolean.TRUE.equals(config.blockPublicAcls())
+                    && Boolean.TRUE.equals(config.ignorePublicAcls())
+                    && Boolean.TRUE.equals(config.blockPublicPolicy())
+                    && Boolean.TRUE.equals(config.restrictPublicBuckets());
+        } catch (NoSuchPublicAccessBlockConfigurationException e) {
+            log.warn("S3 bucket '{}' does not have bucket-level Block Public Access configured", bucketName);
+            return false;
+        } catch (S3Exception e) {
+            log.warn("Could not verify S3 Block Public Access for bucket '{}': {}", bucketName, e.getMessage());
+            return false;
+        }
     }
 
     // ──────────────────────────────────────────────
@@ -308,27 +334,20 @@ public class S3StorageService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "File type not allowed. Accepted types: png, jpg, pdf");
         }
+
+        validateFileSignature(file, contentType);
     }
 
-    private String generateObjectKey(String originalFilename, String contentType) {
+    private String generateObjectKey(String contentType) {
         LocalDate today = LocalDate.now(ZoneOffset.UTC);
-        String extension = getExtension(originalFilename);
-
-        if (extension.isBlank()) {
-            extension = switch (contentType) {
-                case "image/png" -> ".png";
-                case "image/jpeg" -> ".jpg";
-                case "application/pdf" -> ".pdf";
-                default -> "";
-            };
-        }
+        String extension = extensionForContentType(contentType);
 
         return "uploads/%d/%02d/%02d/%s%s".formatted(
                 today.getYear(),
                 today.getMonthValue(),
                 today.getDayOfMonth(),
                 UUID.randomUUID(),
-                extension.toLowerCase()
+                extension
         );
     }
 
@@ -340,15 +359,57 @@ public class S3StorageService {
         String filename = originalFilename.replace('\\', '/');
         filename = filename.substring(filename.lastIndexOf('/') + 1);
         filename = filename.replaceAll("[^A-Za-z0-9._-]", "_");
-        return filename.isBlank() ? "upload" : filename;
+        if (filename.isBlank() || filename.equals(".") || filename.equals("..")) {
+            return "upload";
+        }
+        return filename.length() > MAX_ORIGINAL_FILENAME_LENGTH
+                ? filename.substring(0, MAX_ORIGINAL_FILENAME_LENGTH)
+                : filename;
     }
 
-    private String getExtension(String filename) {
-        int dotIndex = filename.lastIndexOf('.');
-        if (dotIndex < 0 || dotIndex == filename.length() - 1) {
-            return "";
+    private String extensionForContentType(String contentType) {
+        return switch (contentType) {
+            case "image/png" -> ".png";
+            case "image/jpeg" -> ".jpg";
+            case "application/pdf" -> ".pdf";
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "File type not allowed. Accepted types: png, jpg, pdf");
+        };
+    }
+
+    private void validateFileSignature(MultipartFile file, String contentType) {
+        try (InputStream inputStream = file.getInputStream()) {
+            byte[] header = inputStream.readNBytes(8);
+            boolean valid = switch (contentType) {
+                case "image/png" -> header.length >= 8
+                        && (header[0] & 0xFF) == 0x89
+                        && header[1] == 0x50
+                        && header[2] == 0x4E
+                        && header[3] == 0x47
+                        && header[4] == 0x0D
+                        && header[5] == 0x0A
+                        && header[6] == 0x1A
+                        && header[7] == 0x0A;
+                case "image/jpeg" -> header.length >= 3
+                        && (header[0] & 0xFF) == 0xFF
+                        && (header[1] & 0xFF) == 0xD8
+                        && (header[2] & 0xFF) == 0xFF;
+                case "application/pdf" -> header.length >= 4
+                        && header[0] == 0x25
+                        && header[1] == 0x50
+                        && header[2] == 0x44
+                        && header[3] == 0x46;
+                default -> false;
+            };
+
+            if (!valid) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "File content does not match declared content type");
+            }
+        } catch (IOException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Could not read uploaded file");
         }
-        return filename.substring(dotIndex);
     }
 
     public String normalizeObjectKey(String objectKey) {
@@ -362,6 +423,9 @@ public class S3StorageService {
         }
         if (normalized.startsWith("/")) {
             normalized = normalized.substring(1);
+        }
+        if (normalized.contains("..") || normalized.startsWith("http://") || normalized.startsWith("https://")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid documentKey");
         }
         return normalized;
     }

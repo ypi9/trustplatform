@@ -61,6 +61,11 @@ public class S3Config {
             if (info.isAccessible()) {
                 log.info("✅ S3 bucket '{}' in {} is accessible ({} object(s))",
                         info.getBucket(), info.getRegion(), info.getObjectCount());
+                if (s3StorageService.isBucketPublicAccessBlocked()) {
+                    log.info("✅ S3 bucket '{}' has bucket-level Block Public Access enabled", info.getBucket());
+                } else {
+                    log.warn("⚠️ S3 bucket '{}' should keep Block Public Access fully enabled", info.getBucket());
+                }
             } else {
                 log.warn("❌ S3 bucket '{}' is NOT accessible: {}",
                         info.getBucket(), info.getError());

@@ -46,7 +46,7 @@ public class FileService {
         // Audit log
         var user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
-        auditLogService.log("file_uploaded", user.getId(),
+        auditLogService.log("file_uploaded_to_s3", user.getId(),
                 "{\"bucket\":\"" + uploadResult.getBucket()
                 + "\",\"objectKey\":\"" + uploadResult.getObjectKey()
                 + "\",\"originalName\":\"" + uploadResult.getOriginalFilename()
@@ -54,16 +54,6 @@ public class FileService {
                 + "\",\"size\":" + uploadResult.getSize() + "}");
 
         return uploadResult;
-    }
-
-    /**
-     * Checks whether a previously uploaded file exists in S3.
-     *
-     * @param fileUrl the S3 object key returned by storeFile
-     * @return true if the object exists in S3
-     */
-    public boolean fileExists(String fileUrl) {
-        return s3StorageService.objectExists(fileUrl);
     }
 
     public S3UploadResult getFileMetadata(String documentKey) {

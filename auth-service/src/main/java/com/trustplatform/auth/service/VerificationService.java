@@ -276,7 +276,7 @@ public class VerificationService {
         )).toList();
     }
 
-    public VerificationDocumentLinkResponse generateDocumentLink(String requestId) {
+    public VerificationDocumentLinkResponse generateDocumentLink(String requestId, String adminEmail) {
         UUID id;
         try {
             id = UUID.fromString(requestId);
@@ -296,6 +296,14 @@ public class VerificationService {
         }
 
         String downloadUrl = fileService.generateDownloadUrl(documentKey, DOCUMENT_LINK_TTL).toString();
+
+        var admin = userRepository.findByEmail(adminEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Admin user not found"));
+        auditLogService.log("document_link_generated", admin.getId(),
+                "{\"requestId\":\"" + request.getId()
+                + "\",\"documentKey\":\"" + documentKey
+                + "\",\"expiresInSeconds\":" + DOCUMENT_LINK_TTL.toSeconds() + "}");
+
         return new VerificationDocumentLinkResponse(request.getId().toString(), downloadUrl);
     }
 }

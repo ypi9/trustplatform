@@ -10,6 +10,7 @@ import com.trustplatform.auth.dto.VerificationStatusResponse;
 import com.trustplatform.auth.service.VerificationService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -43,6 +44,7 @@ public class VerificationController {
     }
 
     @PostMapping("/review")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ReviewVerificationResponse> review(
             @Valid @RequestBody ReviewVerificationRequest request
     ) {
@@ -51,6 +53,7 @@ public class VerificationController {
     }
 
     @GetMapping("/requests")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<List<VerificationRequestItem>> listRequests(
             @RequestParam(required = false) String status
     ) {
@@ -59,8 +62,15 @@ public class VerificationController {
     }
 
     @GetMapping("/requests/{id}/document-link")
-    public ResponseEntity<VerificationDocumentLinkResponse> documentLink(@PathVariable String id) {
-        VerificationDocumentLinkResponse response = verificationService.generateDocumentLink(id);
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<VerificationDocumentLinkResponse> documentLink(
+            Authentication authentication,
+            @PathVariable String id
+    ) {
+        VerificationDocumentLinkResponse response = verificationService.generateDocumentLink(
+                id,
+                authentication.getName()
+        );
         return ResponseEntity.ok(response);
     }
 }
