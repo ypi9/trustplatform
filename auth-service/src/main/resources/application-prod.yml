@@ -1,0 +1,7 @@
+spring:
+  jpa:
+    show-sql: ${JPA_SHOW_SQL:false}
+
+aws:
+  s3:
+    validate-on-startup: ${S3_VALIDATE_ON_STARTUP:false}
