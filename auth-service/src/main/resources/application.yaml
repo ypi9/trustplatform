@@ -6,19 +6,22 @@ spring:
       name: ${SPRING_SECURITY_USER:admin}
       password: ${SPRING_SECURITY_PASS:admin}
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:authdb}
+    url: ${DB_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:authdb}}
     username: ${DB_USERNAME:yixupi}
     password: ${DB_PASSWORD:}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: update
-    show-sql: true
+      ddl-auto: ${JPA_DDL_AUTO:update}
+    show-sql: ${JPA_SHOW_SQL:true}
   servlet:
     multipart:
       enabled: true
       max-file-size: 5MB
       max-request-size: 5MB
+
+server:
+  port: ${SERVER_PORT:${PORT:8080}}
 
 jwt:
   secret: ${JWT_SECRET:change-me-dev-jwt-secret-that-is-at-least-32-bytes-long}
@@ -27,4 +30,5 @@ jwt:
 aws:
   region: ${AWS_REGION:us-west-1}
   s3:
-    bucket: ${AWS_S3_BUCKET:trustplatform-uploads-1}
+    bucket: ${S3_BUCKET:${AWS_S3_BUCKET:trustplatform-uploads-1}}
+    validate-on-startup: ${S3_VALIDATE_ON_STARTUP:false}
