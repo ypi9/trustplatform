@@ -33,6 +33,7 @@ A JWT-based authentication and identity verification service built with Spring B
 - Deployment target: **AWS Elastic Beanstalk (Corretto 21)**
 - Deployed base URL: `http://trustplatform-dev.eba-ihrcejd2.us-east-2.elasticbeanstalk.com`
 - Database: **Amazon RDS PostgreSQL** in `us-east-2`
+- RDS engine: **PostgreSQL**
 - File storage: **private Amazon S3** bucket in `us-east-2`
 - Config management: **Elastic Beanstalk environment properties**
 - Week 5 deployed subset confirmed working:
@@ -64,6 +65,7 @@ touch .env
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `DB_URL` | `jdbc:postgresql://...` | Full JDBC connection string (preferred in deployment) |
 | `DB_HOST` | `localhost` | PostgreSQL host |
 | `DB_PORT` | `5432` | PostgreSQL port |
 | `DB_NAME` | `authdb` | Database name |
@@ -83,6 +85,14 @@ touch .env
 | `BOOTSTRAP_ADMIN_EMAIL` | *(empty)* | Optional startup email to promote to `ADMIN` |
 
 Export them in your shell, or use a `.env` loader. The `.env` file is gitignored.
+
+For the deployed environment, the core DB connection variables are:
+
+```text
+DB_URL=jdbc:postgresql://<rds-endpoint>:5432/<database-name>
+DB_USERNAME=<db-user>
+DB_PASSWORD=<db-password>
+```
 
 ## AWS Setup
 
@@ -138,6 +148,46 @@ aws s3api get-public-access-block --bucket trustplatform-uploads-1
 
 ## Database Setup
 
+### Deployed database
+
+- Engine: **Amazon RDS PostgreSQL**
+- Region: `us-east-2`
+- Typical deployed connection shape:
+
+```text
+DB_URL=jdbc:postgresql://<rds-endpoint>:5432/<database-name>
+DB_USERNAME=<db-user>
+DB_PASSWORD=<db-password>
+```
+
+### Required security group rule
+
+For a private RDS deployment, the RDS security group should allow:
+
+```text
+Type: PostgreSQL
+Port: 5432
+Source: Elastic Beanstalk EC2 security group
+```
+
+Do **not** open the database to `0.0.0.0/0`.
+
+### Warning
+
+Do **not** expose the RDS instance publicly for normal operation.  
+Keep `Publicly accessible = No` and allow database access only from the Elastic Beanstalk application security group or another intentional private path.
+
+### MVP note
+
+The app currently uses:
+
+```text
+spring.jpa.hibernate.ddl-auto=update
+```
+
+This is acceptable for MVP/demo development, but it is **not** the long-term production migration strategy.  
+For a production-grade setup, use explicit database migrations and controlled schema rollout.
+
 ```bash
 # Start PostgreSQL (macOS Homebrew)
 brew services start postgresql@17
@@ -185,6 +235,18 @@ For a real demo, use an actual PNG, JPEG, or PDF file. Placeholder text with `im
 - **Local/integration coverage:** full Flow A/B/C through `VerificationFlowIntegrationTest`
 - **Deployed environment confirmed:** register user, login, upload verification doc, submit verification
 - **Remaining deployed gap for Week 6:** complete the admin-side document-link generation and review/approve loop after redeploying the bootstrap-admin build and validating admin promotion in Elastic Beanstalk
+
+### Suggested deployed test flow
+
+1. Register user
+2. Login
+3. Upload verification document
+4. Submit verification request
+5. Login as admin
+6. List verification requests
+7. Generate a presigned document link
+8. Approve or reject the request
+9. Check the user verification status
 
 ---
 
