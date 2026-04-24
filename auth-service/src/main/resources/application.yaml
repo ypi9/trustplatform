@@ -32,3 +32,7 @@ aws:
   s3:
     bucket: ${S3_BUCKET:${AWS_S3_BUCKET:trustplatform-uploads-1}}
     validate-on-startup: ${S3_VALIDATE_ON_STARTUP:false}
+
+app:
+  bootstrap:
+    admin-email: ${BOOTSTRAP_ADMIN_EMAIL:}
