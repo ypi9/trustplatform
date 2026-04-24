@@ -6,6 +6,7 @@ A JWT-based authentication and identity verification service built with Spring B
 
 ## Table of Contents
 
+- [Deployment Snapshot](#deployment-snapshot)
 - [Prerequisites](#prerequisites)
 - [Environment Variables](#environment-variables)
 - [AWS Setup](#aws-setup)
@@ -16,6 +17,8 @@ A JWT-based authentication and identity verification service built with Spring B
 - [Request / Response Examples](#request--response-examples)
 - [File Upload](#file-upload)
 - [Verification Flow Diagram](#verification-flow-diagram)
+- [Architecture Diagram](#architecture-diagram)
+- [Architecture Summary](#architecture-summary)
 - [Role-Based Access Control](#role-based-access-control)
 - [Error Response Format](#error-response-format)
 - [Audit Log](#audit-log)
@@ -24,6 +27,21 @@ A JWT-based authentication and identity verification service built with Spring B
 - [Postman Collection](#postman-collection)
 
 ---
+
+## Deployment Snapshot
+
+- Deployment target: **AWS Elastic Beanstalk (Corretto 21)**
+- Deployed base URL: `http://trustplatform-dev.eba-ihrcejd2.us-east-2.elasticbeanstalk.com`
+- Database: **Amazon RDS PostgreSQL** in `us-east-2`
+- File storage: **private Amazon S3** bucket in `us-east-2`
+- Config management: **Elastic Beanstalk environment properties**
+- Week 5 deployed subset confirmed working:
+  - `/health`, `/live`, `/ready`
+  - `/auth/signup`, `/auth/login`, `/auth/me`
+  - `/files/upload`
+  - `/verification/submit`
+- Week 6 follow-up:
+  - finish the full deployed admin review flow after redeploying the bootstrap-admin build and validating the promoted admin account end to end
 
 ## Prerequisites
 
@@ -53,11 +71,16 @@ touch .env
 | `DB_PASSWORD` | *(empty)* | Database password |
 | `JWT_SECRET` | *(dev key)* | HMAC signing key (256-bit+) |
 | `JWT_EXPIRATION` | `3600000` | Token TTL in ms (1 hour) |
-| `AWS_REGION` | `us-west-1` | AWS region |
-| `AWS_S3_BUCKET` | `trustplatform-uploads-1` | S3 bucket name |
+| `AWS_REGION` | `us-east-2` | AWS region |
+| `AWS_S3_BUCKET` | `your-private-s3-bucket` | S3 bucket name |
 | `AWS_ACCESS_KEY_ID` | *(none)* | Optional local AWS access key |
 | `AWS_SECRET_ACCESS_KEY` | *(none)* | Optional local AWS secret key |
 | `AWS_PROFILE` | *(none)* | Optional named AWS profile for local development |
+| `PORT` | `8080` locally / `5000` in Elastic Beanstalk | App listen port |
+| `S3_BUCKET` | *(none)* | Preferred deployed bucket variable |
+| `S3_VALIDATE_ON_STARTUP` | `false` | Optional startup S3 validation |
+| `JPA_SHOW_SQL` | `true` locally / `false` in prod | SQL logging flag |
+| `BOOTSTRAP_ADMIN_EMAIL` | *(empty)* | Optional startup email to promote to `ADMIN` |
 
 Export them in your shell, or use a `.env` loader. The `.env` file is gitignored.
 
@@ -134,6 +157,12 @@ cd auth-service
 
 The app starts at **http://localhost:8080**.
 
+For the deployed environment, use:
+
+```text
+http://trustplatform-dev.eba-ihrcejd2.us-east-2.elasticbeanstalk.com
+```
+
 ## Run Tests
 
 ```bash
@@ -150,6 +179,12 @@ Covered flows:
 - Flow C: upload an oversized file and confirm the request is rejected.
 
 For a real demo, use an actual PNG, JPEG, or PDF file. Placeholder text with `image/png` will fail the file-signature check.
+
+### Week 5 end-to-end testing status
+
+- **Local/integration coverage:** full Flow A/B/C through `VerificationFlowIntegrationTest`
+- **Deployed environment confirmed:** register user, login, upload verification doc, submit verification
+- **Remaining deployed gap for Week 6:** complete the admin-side document-link generation and review/approve loop after redeploying the bootstrap-admin build and validating admin promotion in Elastic Beanstalk
 
 ---
 
@@ -184,6 +219,8 @@ For a real demo, use an actual PNG, JPEG, or PDF file. Placeholder text with `im
 | Method | Endpoint | Auth | Status | Description |
 |--------|----------|------|--------|-------------|
 | GET | `/health` | — | 200 | Health check |
+| GET | `/live` | — | 200 | Lightweight liveness probe |
+| GET | `/ready` | — | 200 / 503 | Readiness check for DB + S3 |
 
 ---
 
@@ -360,7 +397,7 @@ curl http://localhost:8080/verification/requests/<request-id>/document-link \
 ```json
 {
   "requestId": "uuid",
-  "downloadUrl": "https://trustplatform-uploads-1.s3.us-west-1.amazonaws.com/..."
+  "downloadUrl": "https://..."
 }
 ```
 
@@ -436,6 +473,33 @@ Validation happens in layers:
 
 ---
 
+## Architecture Diagram
+
+```text
+Browser / Postman / curl
+          |
+          v
+ AWS Elastic Beanstalk (Spring Boot auth-service)
+          |
+          +--> Amazon RDS PostgreSQL
+          |
+          +--> Amazon S3 (private verification documents)
+                     |
+                     +--> Presigned GET URLs for admin review
+```
+
+## Architecture Summary
+
+The backend runs on AWS Elastic Beanstalk in `us-east-2` as a Spring Boot REST service.  
+User accounts, profiles, verification requests, and audit logs are stored in Amazon RDS PostgreSQL.  
+Verification documents are stored privately in Amazon S3, and the database keeps durable object keys plus metadata instead of public file URLs.  
+Configuration is managed through environment variables in Elastic Beanstalk, with secrets such as DB credentials and JWT keys kept out of git.  
+Health is split into `/live` for liveness, `/health` for lightweight service status, and `/ready` for DB + S3 readiness.  
+Week 5 delivered a working deployed backend for auth, upload, and verification submission in AWS.  
+Week 6 should close the loop on deployed admin review and any final IAM and observability polish.
+
+---
+
 ## Role-Based Access Control
 
 | Role | Capabilities |
@@ -445,11 +509,19 @@ Validation happens in layers:
 
 ### How to create an admin
 
-There is no admin-signup endpoint. Promote a user via SQL after they register:
+There is no admin-signup endpoint. For local/manual setups, promote a user via SQL after they register:
 
 ```sql
 UPDATE users SET role = 'ADMIN' WHERE email = 'admin@example.com';
 ```
+
+For deployed environments without direct DB access, you can also set:
+
+```text
+BOOTSTRAP_ADMIN_EMAIL=admin@example.com
+```
+
+and redeploy or restart the app. On startup, the configured existing user will be promoted to `ADMIN`.
 
 **Important:** The user must log in **after** the role change to receive a JWT that includes the `ADMIN` role claim.
 
@@ -525,6 +597,40 @@ All significant actions are recorded in the `audit_log` table:
 ## Demo Script (curl)
 
 A complete happy-path walkthrough — copy-paste into your terminal:
+
+### Deployed environment quick test
+
+```bash
+export BASE_URL=http://trustplatform-dev.eba-ihrcejd2.us-east-2.elasticbeanstalk.com
+
+curl "$BASE_URL/health"
+curl "$BASE_URL/live"
+curl "$BASE_URL/ready"
+
+curl -X POST "$BASE_URL/auth/signup" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"demo-user@example.com","password":"password123"}'
+
+export TOKEN=$(curl -s -X POST "$BASE_URL/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"demo-user@example.com","password":"password123"}' | jq -r '.accessToken')
+
+curl -X GET "$BASE_URL/auth/me" \
+  -H "Authorization: Bearer $TOKEN"
+
+UPLOAD_RESPONSE=$(curl -s -X POST "$BASE_URL/files/upload" \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "file=@/absolute/path/to/document.pdf")
+
+echo "$UPLOAD_RESPONSE"
+
+export OBJECT_KEY=$(echo "$UPLOAD_RESPONSE" | jq -r '.objectKey')
+
+curl -X POST "$BASE_URL/verification/submit" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d "{\"documentKey\":\"$OBJECT_KEY\"}"
+```
 
 ```bash
 BASE=http://localhost:8080
