@@ -84,10 +84,17 @@ public class S3StorageService {
         try {
             s3Client.putObject(request, RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
         } catch (IOException e) {
+            log.error("Failed to read uploaded file stream for bucket '{}' key '{}'", bucketName, objectKey, e);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Could not read uploaded file");
         } catch (S3Exception e) {
-            log.error("S3 upload failed for bucket '{}' key '{}': {}", bucketName, objectKey, e.getMessage());
+            log.error("S3 upload failed for bucket '{}' key '{}' (status={}, code={}): {}",
+                    bucketName,
+                    objectKey,
+                    e.statusCode(),
+                    e.awsErrorDetails() != null ? e.awsErrorDetails().errorCode() : "unknown",
+                    e.getMessage(),
+                    e);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Could not store file. Please try again.");
         }
@@ -186,8 +193,14 @@ public class S3StorageService {
                 .getObjectRequest(getObjectRequest)
                 .build();
 
-        PresignedGetObjectRequest presignedRequest = s3Presigner.presignGetObject(presignRequest);
-        return presignedRequest.url();
+        try {
+            PresignedGetObjectRequest presignedRequest = s3Presigner.presignGetObject(presignRequest);
+            return presignedRequest.url();
+        } catch (RuntimeException e) {
+            log.error("Failed to generate presigned GET URL for bucket '{}' key '{}'", bucketName, normalizedKey, e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Could not generate document link. Please try again.");
+        }
     }
 
     /**

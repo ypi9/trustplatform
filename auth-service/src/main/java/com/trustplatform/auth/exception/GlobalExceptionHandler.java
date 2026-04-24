@@ -1,5 +1,7 @@
 package com.trustplatform.auth.exception;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +19,8 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
     // ── Helper to build a consistent error body ──
     private Map<String, Object> buildError(HttpStatus status, String message) {
         Map<String, Object> body = new HashMap<>();
@@ -29,6 +33,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<Map<String, Object>> handleAccessDenied(AccessDeniedException ex) {
+        log.warn("Access denied: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(buildError(HttpStatus.FORBIDDEN, "Admin access required"));
     }
@@ -36,6 +41,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<Map<String, Object>> handleResponseStatusException(ResponseStatusException ex) {
         HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
+        if (status.is5xxServerError()) {
+            log.error("Request failed with {}: {}", status, ex.getReason(), ex);
+        } else {
+            log.warn("Request failed with {}: {}", status, ex.getReason());
+        }
         return ResponseEntity.status(status)
                 .body(buildError(status, ex.getReason()));
     }
@@ -67,18 +77,22 @@ public class GlobalExceptionHandler {
             }
         }
 
+        log.warn("Data integrity violation: {}", rootMessage);
+
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(buildError(HttpStatus.CONFLICT, message));
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<Map<String, Object>> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException ex) {
+        log.warn("Multipart request exceeded configured upload limit", ex);
         return ResponseEntity.badRequest()
                 .body(buildError(HttpStatus.BAD_REQUEST, "File size exceeds the 5 MB limit"));
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGenericError(Exception ex) {
+        log.error("Unhandled application error", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(buildError(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred"));
     }

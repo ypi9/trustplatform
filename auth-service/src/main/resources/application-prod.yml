@@ -1,6 +1,7 @@
 spring:
   jpa:
     show-sql: ${JPA_SHOW_SQL:false}
+    open-in-view: false
 
 aws:
   s3:
