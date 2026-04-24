@@ -46,9 +46,10 @@ public class VerificationController {
     @PostMapping("/review")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ReviewVerificationResponse> review(
+            Authentication authentication,
             @Valid @RequestBody ReviewVerificationRequest request
     ) {
-        ReviewVerificationResponse response = verificationService.review(request);
+        ReviewVerificationResponse response = verificationService.review(request, authentication.getName());
         return ResponseEntity.ok(response);
     }
 

@@ -171,7 +171,7 @@ public class VerificationService {
     // REVIEW: Admin approves or rejects a request
     // ──────────────────────────────────────────────
     @Transactional
-    public ReviewVerificationResponse review(ReviewVerificationRequest request) {
+    public ReviewVerificationResponse review(ReviewVerificationRequest request, String reviewerEmail) {
         // Validate requestId format
         UUID requestId;
         try {
@@ -207,7 +207,7 @@ public class VerificationService {
         // Update verification request
         verificationRequest.setStatus(decision);
         verificationRequest.setReviewedAt(Instant.now());
-        verificationRequest.setReviewedBy("admin");
+        verificationRequest.setReviewedBy(reviewerEmail);
         verificationRequest.setReviewNotes(request.getReviewNotes());
         verificationRequestRepository.save(verificationRequest);
 
@@ -228,9 +228,12 @@ public class VerificationService {
         String action = decision == VerificationStatus.APPROVED
                 ? "verification_approved"
                 : "verification_rejected";
-        auditLogService.log(action, verificationRequest.getUserId(),
+        var admin = userRepository.findByEmail(reviewerEmail)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Admin user not found"));
+        auditLogService.log(action, admin.getId(),
                 "{\"requestId\":\"" + requestId
                 + "\",\"decision\":\"" + decision.name()
+                + "\",\"reviewedBy\":\"" + reviewerEmail
                 + "\",\"reviewNotes\":\"" + (request.getReviewNotes() != null ? request.getReviewNotes() : "")
                 + "\"}");
 

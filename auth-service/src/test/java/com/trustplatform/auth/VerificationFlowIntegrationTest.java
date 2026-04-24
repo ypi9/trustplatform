@@ -1,6 +1,7 @@
 package com.trustplatform.auth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.trustplatform.auth.security.JwtService;
 import com.trustplatform.auth.storage.dto.S3BucketInfo;
 import com.trustplatform.auth.storage.dto.S3UploadResult;
 import com.trustplatform.auth.storage.service.S3StorageService;
@@ -49,6 +50,7 @@ public class VerificationFlowIntegrationTest {
     @Autowired private MockMvc mockMvc;
     @Autowired private ObjectMapper objectMapper;
     @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private JwtService jwtService;
 
     // ── Shared state across ordered tests ──
     private String userToken;
@@ -133,6 +135,17 @@ public class VerificationFlowIntegrationTest {
 
         adminToken = objectMapper.readTree(result.getResponse().getContentAsString())
                 .get("accessToken").asText();
+
+        String adminUserId = jdbcTemplate.queryForObject(
+                "SELECT id::text FROM users WHERE email = ?",
+                String.class,
+                ADMIN_EMAIL
+        );
+
+        Assertions.assertEquals(ADMIN_EMAIL, jwtService.extractEmail(adminToken));
+        Assertions.assertEquals(ADMIN_EMAIL, jwtService.extractEmailClaim(adminToken));
+        Assertions.assertEquals(adminUserId, jwtService.extractUserId(adminToken));
+        Assertions.assertEquals("ADMIN", jwtService.extractRole(adminToken));
     }
 
     @Test @Order(3)
@@ -154,6 +167,17 @@ public class VerificationFlowIntegrationTest {
 
         userToken = objectMapper.readTree(result.getResponse().getContentAsString())
                 .get("accessToken").asText();
+
+        String userId = jdbcTemplate.queryForObject(
+                "SELECT id::text FROM users WHERE email = ?",
+                String.class,
+                USER_EMAIL
+        );
+
+        Assertions.assertEquals(USER_EMAIL, jwtService.extractEmail(userToken));
+        Assertions.assertEquals(USER_EMAIL, jwtService.extractEmailClaim(userToken));
+        Assertions.assertEquals(userId, jwtService.extractUserId(userToken));
+        Assertions.assertEquals("USER", jwtService.extractRole(userToken));
     }
 
     // ══════════════════════════════════════════════

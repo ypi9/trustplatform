@@ -14,6 +14,9 @@ import java.util.Date;
 
 @Service
 public class JwtService {
+    static final String USER_ID_CLAIM = "userId";
+    static final String EMAIL_CLAIM = "email";
+    static final String ROLE_CLAIM = "role";
 
     @Value("${jwt.secret}")
     private String secret;
@@ -31,8 +34,9 @@ public class JwtService {
     public String generateToken(User user) {
         return Jwts.builder()
                 .subject(user.getEmail())
-                .claim("userId", user.getId().toString())
-                .claim("role", user.getRole())
+                .claim(USER_ID_CLAIM, user.getId().toString())
+                .claim(EMAIL_CLAIM, user.getEmail())
+                .claim(ROLE_CLAIM, user.getRole())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expiration))
                 .signWith(getSigningKey())
@@ -43,13 +47,32 @@ public class JwtService {
         return extractAllClaims(token).getSubject();
     }
 
+    public String extractEmailClaim(String token) {
+        return extractAllClaims(token).get(EMAIL_CLAIM, String.class);
+    }
+
+    public String extractUserId(String token) {
+        return extractAllClaims(token).get(USER_ID_CLAIM, String.class);
+    }
+
     public String extractRole(String token) {
-        return extractAllClaims(token).get("role", String.class);
+        return extractAllClaims(token).get(ROLE_CLAIM, String.class);
     }
 
     public boolean isTokenValid(String token, User user) {
-        String email = extractEmail(token);
-        return email.equals(user.getEmail()) && !isTokenExpired(token);
+        String subjectEmail = extractEmail(token);
+        String emailClaim = extractEmailClaim(token);
+        String userIdClaim = extractUserId(token);
+        String roleClaim = extractRole(token);
+
+        return subjectEmail.equals(user.getEmail())
+                && emailClaim != null
+                && emailClaim.equals(user.getEmail())
+                && userIdClaim != null
+                && userIdClaim.equals(user.getId().toString())
+                && roleClaim != null
+                && roleClaim.equals(user.getRole())
+                && !isTokenExpired(token);
     }
 
     private boolean isTokenExpired(String token) {

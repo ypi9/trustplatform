@@ -9,14 +9,10 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.List;
-
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -49,41 +45,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = authHeader.substring(7);
 
         try {
-            // 4. Extract email from the token
             String email = jwtService.extractEmail(token);
 
-            // 5. Only authenticate if not already authenticated
             if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-
-                // 6. Load the user from the database
                 User user = userRepository.findByEmail(email).orElse(null);
 
-                // 7. Validate the token against the user
                 if (user != null && jwtService.isTokenValid(token, user)) {
-
-                    // 8. Extract role and build authorities
-                    String role = jwtService.extractRole(token);
-                    List<SimpleGrantedAuthority> authorities = List.of(
-                            new SimpleGrantedAuthority("ROLE_" + (role != null ? role : "USER"))
-                    );
-
-                    // 9. Create an authentication token and set it in the SecurityContext
+                    AuthenticatedUser principal = AuthenticatedUser.from(user);
                     UsernamePasswordAuthenticationToken authToken =
                             new UsernamePasswordAuthenticationToken(
-                                    user.getEmail(),    // principal
-                                    null,               // credentials (not needed)
-                                    authorities         // authorities
+                                    principal,
+                                    null,
+                                    principal.getAuthorities()
                             );
-
-                    authToken.setDetails(
-                            new WebAuthenticationDetailsSource().buildDetails(request)
-                    );
-
                     SecurityContextHolder.getContext().setAuthentication(authToken);
                 }
             }
         } catch (Exception e) {
-            // Token is invalid/expired — do nothing, request continues unauthenticated
+            SecurityContextHolder.clearContext();
         }
 
         filterChain.doFilter(request, response);
