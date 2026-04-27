@@ -21,12 +21,12 @@ import java.io.InputStream;
 import java.net.URL;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneOffset;
-import java.util.Map;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Service that wraps AWS S3 operations.
@@ -44,6 +44,9 @@ public class S3StorageService {
     );
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024;
     private static final int MAX_ORIGINAL_FILENAME_LENGTH = 255;
+    private static final Pattern VERIFICATION_KEY_PATTERN = Pattern.compile(
+            "^verification/([0-9a-fA-F-]{36})/([0-9a-fA-F-]{36})/([0-9a-fA-F-]{36})\\.(png|jpg|pdf)$"
+    );
 
     private final S3Client s3Client;
     private final S3Presigner s3Presigner;
@@ -63,12 +66,12 @@ public class S3StorageService {
      * @param file multipart file from the request
      * @return uploaded object metadata
      */
-    public S3UploadResult upload(MultipartFile file) {
+    public S3UploadResult upload(MultipartFile file, UUID userId, UUID requestId) {
         validateFile(file);
 
         String originalFilename = cleanOriginalFilename(file.getOriginalFilename());
         String contentType = file.getContentType();
-        String objectKey = generateObjectKey(contentType);
+        String objectKey = generateObjectKey(contentType, userId, requestId);
 
         PutObjectRequest request = PutObjectRequest.builder()
                 .bucket(bucketName)
@@ -76,6 +79,8 @@ public class S3StorageService {
                 .contentType(contentType)
                 .contentLength(file.getSize())
                 .metadata(Map.of(
+                        "user-id", userId.toString(),
+                        "request-id", requestId.toString(),
                         "original-filename", originalFilename,
                         "size", String.valueOf(file.getSize())
                 ))
@@ -104,6 +109,7 @@ public class S3StorageService {
         return S3UploadResult.builder()
                 .bucket(bucketName)
                 .objectKey(objectKey)
+                .requestId(requestId)
                 .originalFilename(originalFilename)
                 .contentType(contentType)
                 .size(file.getSize())
@@ -155,6 +161,7 @@ public class S3StorageService {
             return S3UploadResult.builder()
                     .bucket(bucketName)
                     .objectKey(normalizedKey)
+                    .requestId(extractRequestId(normalizedKey))
                     .originalFilename(response.metadata().get("original-filename"))
                     .contentType(response.contentType())
                     .size(response.contentLength() != null ? response.contentLength() : 0)
@@ -203,6 +210,19 @@ public class S3StorageService {
         }
     }
 
+    public UUID extractRequestId(String objectKey) {
+        ParsedObjectKey parsed = parseObjectKey(objectKey);
+        if (parsed == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid verification document key");
+        }
+        return parsed.requestId();
+    }
+
+    public boolean isOwnedByUser(String objectKey, UUID userId) {
+        ParsedObjectKey parsed = parseObjectKey(objectKey);
+        return parsed != null && parsed.userId().equals(userId);
+    }
+
     /**
      * Returns true when S3 Block Public Access is enabled at the bucket level.
      */
@@ -219,7 +239,8 @@ public class S3StorageService {
                     && Boolean.TRUE.equals(config.blockPublicPolicy())
                     && Boolean.TRUE.equals(config.restrictPublicBuckets());
         } catch (S3Exception e) {
-            if (e.statusCode() == 404 || "NoSuchPublicAccessBlockConfiguration".equals(e.awsErrorDetails().errorCode())) {
+            String errorCode = e.awsErrorDetails() != null ? e.awsErrorDetails().errorCode() : null;
+            if (e.statusCode() == 404 || "NoSuchPublicAccessBlockConfiguration".equals(errorCode)) {
                 log.warn("S3 bucket '{}' does not have bucket-level Block Public Access configured", bucketName);
                 return false;
             }
@@ -352,14 +373,12 @@ public class S3StorageService {
         validateFileSignature(file, contentType);
     }
 
-    private String generateObjectKey(String contentType) {
-        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+    private String generateObjectKey(String contentType, UUID userId, UUID requestId) {
         String extension = extensionForContentType(contentType);
 
-        return "uploads/%d/%02d/%02d/%s%s".formatted(
-                today.getYear(),
-                today.getMonthValue(),
-                today.getDayOfMonth(),
+        return "verification/%s/%s/%s%s".formatted(
+                userId,
+                requestId,
                 UUID.randomUUID(),
                 extension
         );
@@ -442,5 +461,29 @@ public class S3StorageService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid documentKey");
         }
         return normalized;
+    }
+
+    private ParsedObjectKey parseObjectKey(String objectKey) {
+        String normalizedKey = normalizeObjectKey(objectKey);
+        if (normalizedKey == null || normalizedKey.isBlank()) {
+            return null;
+        }
+
+        Matcher matcher = VERIFICATION_KEY_PATTERN.matcher(normalizedKey);
+        if (!matcher.matches()) {
+            return null;
+        }
+
+        try {
+            return new ParsedObjectKey(
+                    UUID.fromString(matcher.group(1)),
+                    UUID.fromString(matcher.group(2))
+            );
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    private record ParsedObjectKey(UUID userId, UUID requestId) {
     }
 }

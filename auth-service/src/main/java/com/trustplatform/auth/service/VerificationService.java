@@ -66,6 +66,10 @@ public class VerificationService {
     // ──────────────────────────────────────────────
     @Transactional
     public SubmitVerificationResponse submit(String email, SubmitVerificationRequest request) {
+        // Load user
+        var user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
         // Validate input
         String documentKey = request.getDocumentKey();
         if (documentKey == null || documentKey.isBlank()) {
@@ -76,11 +80,17 @@ public class VerificationService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "documentKey is required");
         }
 
-        S3UploadResult document = fileService.getFileMetadata(documentKey);
+        UUID requestId = fileService.extractRequestId(documentKey);
+        if (request.getRequestId() != null && !request.getRequestId().equals(requestId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "requestId does not match the uploaded verification document");
+        }
+        if (!fileService.isOwnedByUser(documentKey, user.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "You can only submit verification documents that you uploaded");
+        }
 
-        // Load user
-        var user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        S3UploadResult document = fileService.getFileMetadata(documentKey);
 
         // Load UserProfile
         UserProfile profile = userProfileRepository.findById(user.getId())
@@ -102,6 +112,7 @@ public class VerificationService {
 
         // Create new VerificationRequest
         VerificationRequest verificationRequest = new VerificationRequest();
+        verificationRequest.setId(requestId);
         verificationRequest.setUserId(user.getId());
         verificationRequest.setDocumentKey(document.getObjectKey());
         verificationRequest.setDocumentOriginalName(document.getOriginalFilename());

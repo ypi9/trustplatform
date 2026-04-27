@@ -57,7 +57,9 @@ public class VerificationRequest {
 
     @PrePersist
     public void prePersist() {
-        this.id = UUID.randomUUID();
+        if (this.id == null) {
+            this.id = UUID.randomUUID();
+        }
         this.createdAt = Instant.now();
     }
 }

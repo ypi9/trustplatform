@@ -10,6 +10,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URL;
 import java.time.Duration;
+import java.util.UUID;
 
 /**
  * Handles file upload, validation, and storage.
@@ -41,14 +42,16 @@ public class FileService {
      * @throws ResponseStatusException 400 if file is empty, type not allowed, or size exceeded
      */
     public S3UploadResult storeFile(MultipartFile file, String email) {
-        S3UploadResult uploadResult = s3StorageService.upload(file);
-
-        // Audit log
         var user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        UUID requestId = UUID.randomUUID();
+        S3UploadResult uploadResult = s3StorageService.upload(file, user.getId(), requestId);
+
+        // Audit log
         auditLogService.log("file_uploaded_to_s3", user.getId(),
                 "{\"bucket\":\"" + uploadResult.getBucket()
                 + "\",\"objectKey\":\"" + uploadResult.getObjectKey()
+                + "\",\"requestId\":\"" + uploadResult.getRequestId()
                 + "\",\"originalName\":\"" + uploadResult.getOriginalFilename()
                 + "\",\"contentType\":\"" + uploadResult.getContentType()
                 + "\",\"size\":" + uploadResult.getSize() + "}");
@@ -62,5 +65,13 @@ public class FileService {
 
     public URL generateDownloadUrl(String documentKey, Duration expiresIn) {
         return s3StorageService.generatePresignedGetUrl(documentKey, expiresIn);
+    }
+
+    public UUID extractRequestId(String documentKey) {
+        return s3StorageService.extractRequestId(documentKey);
+    }
+
+    public boolean isOwnedByUser(String documentKey, UUID userId) {
+        return s3StorageService.isOwnedByUser(documentKey, userId);
     }
 }

@@ -19,6 +19,8 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
 import java.time.Duration;
 import java.time.Instant;
@@ -26,7 +28,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -204,13 +206,21 @@ public class VerificationFlowIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.fileUrl").exists())
                 .andExpect(jsonPath("$.objectKey").exists())
+                .andExpect(jsonPath("$.requestId").exists())
                 .andExpect(jsonPath("$.bucket").value("test-bucket"))
                 .andExpect(jsonPath("$.contentType").value("image/png"))
                 .andExpect(jsonPath("$.size").value(PNG_BYTES.length))
                 .andReturn();
 
-        fileUrl = objectMapper.readTree(result.getResponse().getContentAsString())
-                .get("fileUrl").asText();
+        var uploadJson = objectMapper.readTree(result.getResponse().getContentAsString());
+        fileUrl = uploadJson.get("fileUrl").asText();
+        String objectKey = uploadJson.get("objectKey").asText();
+        String uploadRequestId = uploadJson.get("requestId").asText();
+        Assertions.assertEquals(objectKey, fileUrl);
+        Assertions.assertTrue(fileUrl.startsWith("verification/"));
+        Assertions.assertTrue(fileUrl.contains("/" + uploadRequestId + "/"));
+        Assertions.assertFalse(fileUrl.startsWith("http://"));
+        Assertions.assertFalse(fileUrl.startsWith("https://"));
     }
 
     @Test @Order(12)
@@ -236,12 +246,15 @@ public class VerificationFlowIntegrationTest {
     @Test @Order(13)
     void databaseStoresS3ObjectMetadata() {
         Map<String, Object> row = jdbcTemplate.queryForMap(
-                "SELECT document_key, document_original_name, document_content_type, document_size " +
+                "SELECT document_key, document_url, document_original_name, document_content_type, document_size " +
                         "FROM verification_requests WHERE id = ?",
                 java.util.UUID.fromString(requestId)
         );
 
         Assertions.assertEquals(fileUrl, row.get("document_key"));
+        Assertions.assertEquals(fileUrl, row.get("document_url"));
+        Assertions.assertFalse(((String) row.get("document_url")).startsWith("http://"));
+        Assertions.assertFalse(((String) row.get("document_url")).startsWith("https://"));
         Assertions.assertEquals("id-card.png", row.get("document_original_name"));
         Assertions.assertEquals("image/png", row.get("document_content_type"));
         Assertions.assertEquals((long) PNG_BYTES.length, ((Number) row.get("document_size")).longValue());
@@ -533,6 +546,26 @@ public class VerificationFlowIntegrationTest {
     }
 
     @Test @Order(56)
+    void uploadSpoofedPngReturns400() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "malware.png", "image/png", "not-a-real-png".getBytes());
+
+        mockMvc.perform(multipart("/files/upload")
+                .file(file)
+                .header("Authorization", "Bearer " + userToken))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test @Order(57)
+    void submitWithPublicDocumentUrlReturns400() throws Exception {
+        mockMvc.perform(post("/verification/submit")
+                .header("Authorization", "Bearer " + secondUserToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"documentKey\": \"https://example.test/public/id-card.png\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test @Order(58)
     void duplicateSignupReturnsConflict() throws Exception {
         mockMvc.perform(post("/auth/signup")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -540,7 +573,7 @@ public class VerificationFlowIntegrationTest {
                 .andExpect(status().isConflict());
     }
 
-    @Test @Order(57)
+    @Test @Order(59)
     void loginWithWrongPasswordReturnsUnauthorized() throws Exception {
         mockMvc.perform(post("/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -548,7 +581,7 @@ public class VerificationFlowIntegrationTest {
                 .andExpect(status().isUnauthorized());
     }
 
-    @Test @Order(58)
+    @Test @Order(60)
     void adminListsAllRequests() throws Exception {
         mockMvc.perform(get("/verification/requests")
                 .header("Authorization", "Bearer " + adminToken))
@@ -566,7 +599,6 @@ public class VerificationFlowIntegrationTest {
     }
 
     static class FakeS3StorageService extends S3StorageService {
-        private final AtomicInteger uploadCounter = new AtomicInteger();
         private final Map<String, S3UploadResult> uploadedObjects = new HashMap<>();
 
         FakeS3StorageService() {
@@ -574,8 +606,8 @@ public class VerificationFlowIntegrationTest {
         }
 
         @Override
-        public S3UploadResult upload(MultipartFile file) {
-            S3UploadResult result = validateAndStoreFakeUpload(file);
+        public S3UploadResult upload(MultipartFile file, UUID userId, UUID requestId) {
+            S3UploadResult result = validateAndStoreFakeUpload(file, userId, requestId);
             uploadedObjects.put(result.getObjectKey(), result);
             return result;
         }
@@ -603,7 +635,7 @@ public class VerificationFlowIntegrationTest {
         public S3BucketInfo validateBucketAccess(int maxKeys) {
             return S3BucketInfo.builder()
                     .bucket("test-bucket")
-                    .region("us-west-1")
+                    .region("us-east-2")
                     .accessible(true)
                     .objectCount(uploadedObjects.size())
                     .sampleKeys(uploadedObjects.keySet().stream().limit(maxKeys).toList())
@@ -624,7 +656,7 @@ public class VerificationFlowIntegrationTest {
                     .toList();
         }
 
-        private S3UploadResult validateAndStoreFakeUpload(MultipartFile file) {
+        private S3UploadResult validateAndStoreFakeUpload(MultipartFile file, UUID userId, UUID requestId) {
             if (file == null || file.isEmpty()) {
                 throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "File is empty");
             }
@@ -637,6 +669,7 @@ public class VerificationFlowIntegrationTest {
                 throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,
                         "File type not allowed. Accepted types: png, jpg, pdf");
             }
+            validateFileSignature(file, contentType);
 
             String extension = switch (contentType) {
                 case "image/png" -> ".png";
@@ -644,10 +677,11 @@ public class VerificationFlowIntegrationTest {
                 case "application/pdf" -> ".pdf";
                 default -> "";
             };
-            String objectKey = "uploads/test/object-" + uploadCounter.incrementAndGet() + extension;
+            String objectKey = "verification/" + userId + "/" + requestId + "/" + UUID.randomUUID() + extension;
             return S3UploadResult.builder()
                     .bucket("test-bucket")
                     .objectKey(objectKey)
+                    .requestId(requestId)
                     .originalFilename(file.getOriginalFilename())
                     .contentType(contentType)
                     .size(file.getSize())
@@ -659,6 +693,41 @@ public class VerificationFlowIntegrationTest {
                 return null;
             }
             return objectKey.startsWith("/") ? objectKey.substring(1) : objectKey;
+        }
+
+        private void validateFileSignature(MultipartFile file, String contentType) {
+            try (InputStream inputStream = file.getInputStream()) {
+                byte[] header = inputStream.readNBytes(8);
+                boolean valid = switch (contentType) {
+                    case "image/png" -> header.length >= 8
+                            && (header[0] & 0xFF) == 0x89
+                            && header[1] == 0x50
+                            && header[2] == 0x4E
+                            && header[3] == 0x47
+                            && header[4] == 0x0D
+                            && header[5] == 0x0A
+                            && header[6] == 0x1A
+                            && header[7] == 0x0A;
+                    case "image/jpeg" -> header.length >= 3
+                            && (header[0] & 0xFF) == 0xFF
+                            && (header[1] & 0xFF) == 0xD8
+                            && (header[2] & 0xFF) == 0xFF;
+                    case "application/pdf" -> header.length >= 4
+                            && header[0] == 0x25
+                            && header[1] == 0x50
+                            && header[2] == 0x44
+                            && header[3] == 0x46;
+                    default -> false;
+                };
+
+                if (!valid) {
+                    throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,
+                            "File content does not match declared content type");
+                }
+            } catch (IOException e) {
+                throw new ResponseStatusException(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR,
+                        "Could not read uploaded file");
+            }
         }
     }
 }
