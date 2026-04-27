@@ -275,14 +275,24 @@ public class VerificationFlowIntegrationTest {
                 .header("Authorization", "Bearer " + userToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"documentKey\": \"" + fileUrl + "\"}"))
-                .andExpect(status().isConflict());
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.error").value("Conflict"))
+                .andExpect(jsonPath("$.message").value("User already has a pending verification request"))
+                .andExpect(jsonPath("$.path").value("/verification/submit"));
     }
 
     @Test @Order(16)
     void regularUserCannotAccessAdminListEndpoint() throws Exception {
         mockMvc.perform(get("/verification/requests")
                 .header("Authorization", "Bearer " + userToken))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.error").value("Forbidden"))
+                .andExpect(jsonPath("$.message").value("You do not have permission to access this resource"))
+                .andExpect(jsonPath("$.path").value("/verification/requests"));
     }
 
     @Test @Order(17)
@@ -494,15 +504,25 @@ public class VerificationFlowIntegrationTest {
                 .header("Authorization", "Bearer " + secondUserToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.message").value("documentKey is required"))
+                .andExpect(jsonPath("$.path").value("/verification/submit"));
     }
 
     @Test @Order(51)
-    void submitWithNoTokenReturnsForbidden() throws Exception {
+    void submitWithNoTokenReturnsUnauthorized() throws Exception {
         mockMvc.perform(post("/verification/submit")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"documentKey\": \"uploads/fake.png\"}"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.error").value("Unauthorized"))
+                .andExpect(jsonPath("$.message").value("Authentication is required to access this resource"))
+                .andExpect(jsonPath("$.path").value("/verification/submit"));
     }
 
     @Test @Order(52)
@@ -526,12 +546,17 @@ public class VerificationFlowIntegrationTest {
     }
 
     @Test @Order(54)
-    void uploadWithNoTokenReturnsForbidden() throws Exception {
+    void uploadWithNoTokenReturnsUnauthorized() throws Exception {
         MockMultipartFile file = new MockMultipartFile(
                 "file", "id.png", "image/png", PNG_BYTES);
 
         mockMvc.perform(multipart("/files/upload").file(file))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.error").value("Unauthorized"))
+                .andExpect(jsonPath("$.message").value("Authentication is required to access this resource"))
+                .andExpect(jsonPath("$.path").value("/files/upload"));
     }
 
     @Test @Order(55)
@@ -570,7 +595,12 @@ public class VerificationFlowIntegrationTest {
         mockMvc.perform(post("/auth/signup")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\": \"" + USER_EMAIL + "\", \"password\": \"password999\"}"))
-                .andExpect(status().isConflict());
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.error").value("Conflict"))
+                .andExpect(jsonPath("$.message").value("Email already exists"))
+                .andExpect(jsonPath("$.path").value("/auth/signup"));
     }
 
     @Test @Order(59)
@@ -578,10 +608,30 @@ public class VerificationFlowIntegrationTest {
         mockMvc.perform(post("/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\": \"" + USER_EMAIL + "\", \"password\": \"wrongpassword\"}"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.error").value("Unauthorized"))
+                .andExpect(jsonPath("$.message").value("Invalid email or password"))
+                .andExpect(jsonPath("$.path").value("/auth/login"));
     }
 
     @Test @Order(60)
+    void signupValidationErrorsUseStandardErrorFormat() throws Exception {
+        mockMvc.perform(post("/auth/signup")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\": \"not-an-email\", \"password\": \"short\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.message").value("Validation failed"))
+                .andExpect(jsonPath("$.path").value("/auth/signup"))
+                .andExpect(jsonPath("$.fields.email").value("Invalid email format"))
+                .andExpect(jsonPath("$.fields.password").value("Password must be at least 8 characters"));
+    }
+
+    @Test @Order(61)
     void adminListsAllRequests() throws Exception {
         mockMvc.perform(get("/verification/requests")
                 .header("Authorization", "Bearer " + adminToken))

@@ -5,41 +5,40 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.server.ResponseStatusException;
+import jakarta.servlet.http.HttpServletRequest;
 
-import java.time.Instant;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    private final ApiErrorResponseFactory errorResponseFactory;
 
-    // ── Helper to build a consistent error body ──
-    private Map<String, Object> buildError(HttpStatus status, String message) {
-        Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", Instant.now().toString());
-        body.put("status", status.value());
-        body.put("error", status.getReasonPhrase());
-        body.put("message", message);
-        return body;
+    public GlobalExceptionHandler(ApiErrorResponseFactory errorResponseFactory) {
+        this.errorResponseFactory = errorResponseFactory;
     }
 
     @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<Map<String, Object>> handleAccessDenied(AccessDeniedException ex) {
-        log.warn("Access denied: {}", ex.getMessage());
+    public ResponseEntity<ApiErrorResponse> handleAccessDenied(AccessDeniedException ex,
+                                                               HttpServletRequest request) {
+        log.warn("Access denied for {}: {}", request.getRequestURI(), ex.getMessage());
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(buildError(HttpStatus.FORBIDDEN, "Admin access required"));
+                .body(errorResponseFactory.build(HttpStatus.FORBIDDEN,
+                        "You do not have permission to access this resource", request));
     }
 
     @ExceptionHandler(ResponseStatusException.class)
-    public ResponseEntity<Map<String, Object>> handleResponseStatusException(ResponseStatusException ex) {
+    public ResponseEntity<ApiErrorResponse> handleResponseStatusException(ResponseStatusException ex,
+                                                                          HttpServletRequest request) {
         HttpStatus status = HttpStatus.valueOf(ex.getStatusCode().value());
         if (status.is5xxServerError()) {
             log.error("Request failed with {}: {}", status, ex.getReason(), ex);
@@ -47,23 +46,32 @@ public class GlobalExceptionHandler {
             log.warn("Request failed with {}: {}", status, ex.getReason());
         }
         return ResponseEntity.status(status)
-                .body(buildError(status, ex.getReason()));
+                .body(errorResponseFactory.build(status, ex.getReason(), request));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Map<String, Object>> handleValidationErrors(MethodArgumentNotValidException ex) {
-        Map<String, String> fieldErrors = new HashMap<>();
+    public ResponseEntity<ApiErrorResponse> handleValidationErrors(MethodArgumentNotValidException ex,
+                                                                   HttpServletRequest request) {
+        Map<String, String> fieldErrors = new LinkedHashMap<>();
         ex.getBindingResult().getFieldErrors().forEach(error ->
-            fieldErrors.put(error.getField(), error.getDefaultMessage())
+                fieldErrors.put(error.getField(), error.getDefaultMessage())
         );
 
-        Map<String, Object> body = buildError(HttpStatus.BAD_REQUEST, "Validation failed");
-        body.put("fields", fieldErrors);
-        return ResponseEntity.badRequest().body(body);
+        return ResponseEntity.badRequest()
+                .body(errorResponseFactory.build(HttpStatus.BAD_REQUEST, "Validation failed", request, fieldErrors));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiErrorResponse> handleUnreadableRequest(HttpMessageNotReadableException ex,
+                                                                    HttpServletRequest request) {
+        log.warn("Malformed request body for {}: {}", request.getRequestURI(), ex.getMessage());
+        return ResponseEntity.badRequest()
+                .body(errorResponseFactory.build(HttpStatus.BAD_REQUEST, "Malformed request body", request));
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
-    public ResponseEntity<Map<String, Object>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+    public ResponseEntity<ApiErrorResponse> handleDataIntegrityViolation(DataIntegrityViolationException ex,
+                                                                         HttpServletRequest request) {
         String message = "Data integrity violation";
         String rootMessage = ex.getMostSpecificCause().getMessage();
 
@@ -80,20 +88,23 @@ public class GlobalExceptionHandler {
         log.warn("Data integrity violation: {}", rootMessage);
 
         return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(buildError(HttpStatus.CONFLICT, message));
+                .body(errorResponseFactory.build(HttpStatus.CONFLICT, message, request));
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
-    public ResponseEntity<Map<String, Object>> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException ex) {
+    public ResponseEntity<ApiErrorResponse> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException ex,
+                                                                        HttpServletRequest request) {
         log.warn("Multipart request exceeded configured upload limit", ex);
         return ResponseEntity.badRequest()
-                .body(buildError(HttpStatus.BAD_REQUEST, "File size exceeds the 5 MB limit"));
+                .body(errorResponseFactory.build(HttpStatus.BAD_REQUEST,
+                        "File size exceeds the 5 MB limit", request));
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String, Object>> handleGenericError(Exception ex) {
+    public ResponseEntity<ApiErrorResponse> handleGenericError(Exception ex, HttpServletRequest request) {
         log.error("Unhandled application error", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(buildError(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred"));
+                .body(errorResponseFactory.build(HttpStatus.INTERNAL_SERVER_ERROR,
+                        "An unexpected error occurred", request));
     }
 }

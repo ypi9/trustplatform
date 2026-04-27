@@ -1,5 +1,7 @@
 package com.trustplatform.auth.config;
 
+import com.trustplatform.auth.exception.JsonAccessDeniedHandler;
+import com.trustplatform.auth.exception.JsonAuthenticationEntryPoint;
 import com.trustplatform.auth.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -18,9 +20,15 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final JsonAuthenticationEntryPoint authenticationEntryPoint;
+    private final JsonAccessDeniedHandler accessDeniedHandler;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
+                          JsonAuthenticationEntryPoint authenticationEntryPoint,
+                          JsonAccessDeniedHandler accessDeniedHandler) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.authenticationEntryPoint = authenticationEntryPoint;
+        this.accessDeniedHandler = accessDeniedHandler;
     }
 
     @Bean
@@ -29,6 +37,10 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .sessionManagement(session -> session
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+            )
+            .exceptionHandling(exceptions -> exceptions
+                .authenticationEntryPoint(authenticationEntryPoint)
+                .accessDeniedHandler(accessDeniedHandler)
             )
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/auth/signup", "/auth/login", "/health", "/live", "/ready").permitAll()
