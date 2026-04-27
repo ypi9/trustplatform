@@ -22,12 +22,12 @@
     },
     {
       "key": "fileUrl",
-      "value": "uploads/2026/04/21/your-uploaded-object.png",
+      "value": "verification/<userId>/<requestId>/<uuid>.png",
       "type": "string"
     },
     {
       "key": "documentKey",
-      "value": "uploads/2026/04/21/your-uploaded-object.png",
+      "value": "verification/<userId>/<requestId>/<uuid>.png",
       "type": "string"
     },
     {
