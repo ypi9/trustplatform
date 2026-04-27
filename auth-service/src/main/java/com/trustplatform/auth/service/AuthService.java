@@ -16,6 +16,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Locale;
+
 @Service
 public class AuthService {
 
@@ -36,12 +38,14 @@ public class AuthService {
 
     @Transactional
     public String signup(SignupRequest request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
+        String normalizedEmail = normalizeEmail(request.getEmail());
+
+        if (userRepository.existsByEmailIgnoreCase(normalizedEmail)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Email already exists");
         }
 
         User user = new User();
-        user.setEmail(request.getEmail());
+        user.setEmail(normalizedEmail);
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
         user.setRole("USER");
         userRepository.save(user);
@@ -61,29 +65,30 @@ public class AuthService {
     }
 
     public AuthResponse login(LoginRequest request) {
-        User user = userRepository.findByEmail(request.getEmail()).orElse(null);
+        String normalizedEmail = normalizeEmail(request.getEmail());
+        User user = userRepository.findByEmailIgnoreCase(normalizedEmail).orElse(null);
 
         if (user == null) {
             auditLogService.log("login_failed", null,
-                    "{\"email\":\"" + request.getEmail() + "\", \"reason\":\"user_not_found\"}");
+                    "{\"email\":\"" + normalizedEmail + "\", \"reason\":\"user_not_found\"}");
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
         }
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             auditLogService.log("login_failed", user.getId(),
-                    "{\"email\":\"" + request.getEmail() + "\", \"reason\":\"wrong_password\"}");
+                    "{\"email\":\"" + normalizedEmail + "\", \"reason\":\"wrong_password\"}");
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
         }
 
         auditLogService.log("login_success", user.getId(),
-                "{\"email\":\"" + request.getEmail() + "\"}");
+                "{\"email\":\"" + normalizedEmail + "\"}");
 
         String token = jwtService.generateToken(user);
         return new AuthResponse(token);
     }
 
     public UserResponse getProfile(String email) {
-        User user = userRepository.findByEmail(email)
+        User user = userRepository.findByEmailIgnoreCase(normalizeEmail(email))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
         UserProfile profile = userProfileRepository.findById(user.getId())
@@ -95,5 +100,9 @@ public class AuthService {
                 profile.isVerified(),
                 profile.getVerificationLevel().name()
         );
+    }
+
+    private String normalizeEmail(String email) {
+        return email.strip().toLowerCase(Locale.ROOT);
     }
 }

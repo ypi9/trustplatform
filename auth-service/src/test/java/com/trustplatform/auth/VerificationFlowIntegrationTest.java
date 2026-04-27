@@ -182,6 +182,15 @@ public class VerificationFlowIntegrationTest {
         Assertions.assertEquals("USER", jwtService.extractRole(userToken));
     }
 
+    @Test @Order(5)
+    void loginIsCaseInsensitiveForEmail() throws Exception {
+        mockMvc.perform(post("/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\": \"" + USER_EMAIL.toUpperCase() + "\", \"password\": \"" + PASSWORD + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").exists());
+    }
+
     // ══════════════════════════════════════════════
     //  FLOW A: Upload → Submit → Approve → VERIFIED
     // ══════════════════════════════════════════════
@@ -604,6 +613,15 @@ public class VerificationFlowIntegrationTest {
     }
 
     @Test @Order(59)
+    void duplicateSignupIgnoringEmailCaseReturnsConflict() throws Exception {
+        mockMvc.perform(post("/auth/signup")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\": \"" + USER_EMAIL.toUpperCase() + "\", \"password\": \"password999\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("Email already exists"));
+    }
+
+    @Test @Order(60)
     void loginWithWrongPasswordReturnsUnauthorized() throws Exception {
         mockMvc.perform(post("/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -616,7 +634,7 @@ public class VerificationFlowIntegrationTest {
                 .andExpect(jsonPath("$.path").value("/auth/login"));
     }
 
-    @Test @Order(60)
+    @Test @Order(61)
     void signupValidationErrorsUseStandardErrorFormat() throws Exception {
         mockMvc.perform(post("/auth/signup")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -631,7 +649,7 @@ public class VerificationFlowIntegrationTest {
                 .andExpect(jsonPath("$.fields.password").value("Password must be at least 8 characters"));
     }
 
-    @Test @Order(61)
+    @Test @Order(62)
     void adminListsAllRequests() throws Exception {
         mockMvc.perform(get("/verification/requests")
                 .header("Authorization", "Bearer " + adminToken))

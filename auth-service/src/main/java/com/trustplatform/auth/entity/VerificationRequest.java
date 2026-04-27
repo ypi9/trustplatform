@@ -30,16 +30,16 @@ public class VerificationRequest {
     @Column(nullable = false, name = "document_url")
     private String documentUrl;
 
-    @Column(name = "document_key")
+    @Column(nullable = false, name = "document_key")
     private String documentKey;
 
-    @Column(name = "document_original_name")
+    @Column(nullable = false, name = "document_original_name")
     private String documentOriginalName;
 
-    @Column(name = "document_content_type")
+    @Column(nullable = false, name = "document_content_type")
     private String documentContentType;
 
-    @Column(name = "document_size")
+    @Column(nullable = false, name = "document_size")
     private Long documentSize;
 
     @Enumerated(EnumType.STRING)
