@@ -1,7 +1,7 @@
 package com.trustplatform.auth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.trustplatform.auth.security.JwtService;
+import com.trustplatform.auth.auth.security.JwtService;
 import com.trustplatform.auth.storage.dto.S3BucketInfo;
 import com.trustplatform.auth.storage.dto.S3UploadResult;
 import com.trustplatform.auth.storage.service.S3StorageService;
@@ -714,14 +714,6 @@ public class VerificationFlowIntegrationTest {
         @Override
         public boolean isBucketPublicAccessBlocked() {
             return true;
-        }
-
-        @Override
-        public List<String> listObjects(String prefix, int maxKeys) {
-            return uploadedObjects.keySet().stream()
-                    .filter(key -> prefix == null || prefix.isBlank() || key.startsWith(prefix))
-                    .limit(maxKeys)
-                    .toList();
         }
 
         private S3UploadResult validateAndStoreFakeUpload(MultipartFile file, UUID userId, UUID requestId) {

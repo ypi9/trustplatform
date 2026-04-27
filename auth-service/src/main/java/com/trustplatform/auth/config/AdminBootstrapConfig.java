@@ -1,6 +1,6 @@
 package com.trustplatform.auth.config;
 
-import com.trustplatform.auth.repository.UserRepository;
+import com.trustplatform.auth.user.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;

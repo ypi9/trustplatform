@@ -117,33 +117,6 @@ public class S3StorageService {
     }
 
     /**
-     * Checks whether an object exists in the configured bucket.
-     */
-    public boolean objectExists(String objectKey) {
-        String normalizedKey = normalizeObjectKey(objectKey);
-        if (normalizedKey == null || normalizedKey.isBlank()) {
-            return false;
-        }
-
-        try {
-            s3Client.headObject(HeadObjectRequest.builder()
-                    .bucket(bucketName)
-                    .key(normalizedKey)
-                    .build());
-            return true;
-        } catch (NoSuchKeyException e) {
-            return false;
-        } catch (S3Exception e) {
-            if (e.statusCode() == 404) {
-                return false;
-            }
-            log.warn("S3 object check failed for bucket '{}' key '{}': {}",
-                    bucketName, normalizedKey, e.getMessage());
-            return false;
-        }
-    }
-
-    /**
      * Reads trusted object metadata from S3.
      */
     public S3UploadResult getObjectMetadata(String objectKey) {
@@ -318,29 +291,6 @@ public class S3StorageService {
         }
     }
 
-    /**
-     * Lists object keys in the bucket, optionally filtered by a prefix.
-     *
-     * @param prefix key prefix filter (e.g. "uploads/"), or {@code null} for all
-     * @param maxKeys maximum number of keys to return
-     * @return list of matching object keys
-     */
-    public List<String> listObjects(String prefix, int maxKeys) {
-        ListObjectsV2Request.Builder request = ListObjectsV2Request.builder()
-                .bucket(bucketName)
-                .maxKeys(maxKeys);
-
-        if (prefix != null && !prefix.isBlank()) {
-            request.prefix(prefix);
-        }
-
-        ListObjectsV2Response response = s3Client.listObjectsV2(request.build());
-
-        return response.contents().stream()
-                .map(S3Object::key)
-                .toList();
-    }
-
     // ──────────────────────────────────────────────
     //  Helpers
     // ──────────────────────────────────────────────
@@ -445,7 +395,7 @@ public class S3StorageService {
         }
     }
 
-    public String normalizeObjectKey(String objectKey) {
+    private String normalizeObjectKey(String objectKey) {
         if (objectKey == null) {
             return null;
         }
