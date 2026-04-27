@@ -22,7 +22,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -127,12 +129,13 @@ public class VerificationService {
         userProfileRepository.save(profile);
 
         // Audit log
-        auditLogService.log("verification_submitted", user.getId(),
-                "{\"requestId\":\"" + verificationRequest.getId()
-                + "\",\"documentKey\":\"" + document.getObjectKey()
-                + "\",\"documentOriginalName\":\"" + document.getOriginalFilename()
-                + "\",\"documentContentType\":\"" + document.getContentType()
-                + "\",\"documentSize\":" + document.getSize() + "}");
+        Map<String, Object> submitMetadata = new LinkedHashMap<>();
+        submitMetadata.put("requestId", verificationRequest.getId());
+        submitMetadata.put("documentKey", document.getObjectKey());
+        submitMetadata.put("documentOriginalName", document.getOriginalFilename());
+        submitMetadata.put("documentContentType", document.getContentType());
+        submitMetadata.put("documentSize", document.getSize());
+        auditLogService.log("verification_submitted", user.getId(), submitMetadata);
 
         return new SubmitVerificationResponse(
                 verificationRequest.getId().toString(),
@@ -241,12 +244,13 @@ public class VerificationService {
                 : "verification_rejected";
         var admin = userRepository.findByEmail(reviewerEmail)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Admin user not found"));
-        auditLogService.log(action, admin.getId(),
-                "{\"requestId\":\"" + requestId
-                + "\",\"decision\":\"" + decision.name()
-                + "\",\"reviewedBy\":\"" + reviewerEmail
-                + "\",\"reviewNotes\":\"" + (request.getReviewNotes() != null ? request.getReviewNotes() : "")
-                + "\"}");
+        Map<String, Object> reviewMetadata = new LinkedHashMap<>();
+        reviewMetadata.put("requestId", requestId);
+        reviewMetadata.put("decision", decision.name());
+        reviewMetadata.put("reviewedBy", reviewerEmail);
+        reviewMetadata.put("reviewNotes", request.getReviewNotes() != null ? request.getReviewNotes() : "");
+        reviewMetadata.put("subjectUserId", verificationRequest.getUserId());
+        auditLogService.log(action, admin.getId(), reviewMetadata);
 
         return new ReviewVerificationResponse(
                 requestId.toString(),
@@ -313,10 +317,11 @@ public class VerificationService {
 
         var admin = userRepository.findByEmail(adminEmail)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Admin user not found"));
-        auditLogService.log("document_link_generated", admin.getId(),
-                "{\"requestId\":\"" + request.getId()
-                + "\",\"documentKey\":\"" + documentKey
-                + "\",\"expiresInSeconds\":" + DOCUMENT_LINK_TTL.toSeconds() + "}");
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("requestId", request.getId());
+        metadata.put("documentKey", documentKey);
+        metadata.put("expiresInSeconds", DOCUMENT_LINK_TTL.toSeconds());
+        auditLogService.log("document_link_generated", admin.getId(), metadata);
 
         return new VerificationDocumentLinkResponse(request.getId().toString(), downloadUrl);
     }

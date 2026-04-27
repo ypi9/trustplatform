@@ -16,7 +16,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
 
 @Service
 public class AuthService {
@@ -58,8 +60,9 @@ public class AuthService {
         profile.setVerificationLevel(VerificationLevel.NONE);
         userProfileRepository.save(profile);
 
-        auditLogService.log("user_registered", user.getId(),
-                "{\"email\":\"" + user.getEmail() + "\"}");
+        auditLogService.log("user_registered", user.getId(), Map.of(
+                "email", user.getEmail()
+        ));
 
         return "User created";
     }
@@ -69,19 +72,25 @@ public class AuthService {
         User user = userRepository.findByEmailIgnoreCase(normalizedEmail).orElse(null);
 
         if (user == null) {
-            auditLogService.log("login_failed", null,
-                    "{\"email\":\"" + normalizedEmail + "\", \"reason\":\"user_not_found\"}");
+            auditLogService.log("login_failed", null, Map.of(
+                    "email", normalizedEmail,
+                    "reason", "user_not_found"
+            ));
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
         }
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            auditLogService.log("login_failed", user.getId(),
-                    "{\"email\":\"" + normalizedEmail + "\", \"reason\":\"wrong_password\"}");
+            auditLogService.log("login_failed", user.getId(), Map.of(
+                    "email", normalizedEmail,
+                    "reason", "wrong_password"
+            ));
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
         }
 
-        auditLogService.log("login_success", user.getId(),
-                "{\"email\":\"" + normalizedEmail + "\"}");
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("email", normalizedEmail);
+        metadata.put("role", user.getRole());
+        auditLogService.log("login_success", user.getId(), metadata);
 
         String token = jwtService.generateToken(user);
         return new AuthResponse(token);

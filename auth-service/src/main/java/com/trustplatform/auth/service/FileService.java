@@ -10,6 +10,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URL;
 import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -47,14 +49,14 @@ public class FileService {
         UUID requestId = UUID.randomUUID();
         S3UploadResult uploadResult = s3StorageService.upload(file, user.getId(), requestId);
 
-        // Audit log
-        auditLogService.log("file_uploaded_to_s3", user.getId(),
-                "{\"bucket\":\"" + uploadResult.getBucket()
-                + "\",\"objectKey\":\"" + uploadResult.getObjectKey()
-                + "\",\"requestId\":\"" + uploadResult.getRequestId()
-                + "\",\"originalName\":\"" + uploadResult.getOriginalFilename()
-                + "\",\"contentType\":\"" + uploadResult.getContentType()
-                + "\",\"size\":" + uploadResult.getSize() + "}");
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("bucket", uploadResult.getBucket());
+        metadata.put("objectKey", uploadResult.getObjectKey());
+        metadata.put("requestId", uploadResult.getRequestId());
+        metadata.put("originalName", uploadResult.getOriginalFilename());
+        metadata.put("contentType", uploadResult.getContentType());
+        metadata.put("size", uploadResult.getSize());
+        auditLogService.log("file_uploaded", user.getId(), metadata);
 
         return uploadResult;
     }
