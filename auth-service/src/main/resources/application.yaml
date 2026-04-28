@@ -36,3 +36,14 @@ aws:
 app:
   bootstrap:
     admin-email: ${BOOTSTRAP_ADMIN_EMAIL:}
+  logging:
+    slow-request-threshold-ms: ${SLOW_REQUEST_THRESHOLD_MS:1000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics
+  endpoint:
+    health:
+      show-details: never

@@ -1,6 +1,7 @@
 package com.trustplatform.auth.verification.service;
 
 import com.trustplatform.auth.audit.service.AuditLogService;
+import com.trustplatform.auth.common.metrics.AppMetricsService;
 import com.trustplatform.auth.storage.FileService;
 import com.trustplatform.auth.verification.dto.request.ReviewVerificationRequest;
 import com.trustplatform.auth.verification.dto.response.ReviewVerificationResponse;
@@ -54,15 +55,18 @@ public class VerificationService {
     private final VerificationRequestRepository verificationRequestRepository;
     private final AuditLogService auditLogService;
     private final FileService fileService;
+    private final AppMetricsService appMetricsService;
 
     public VerificationService(UserRepository userRepository, UserProfileRepository userProfileRepository,
                                VerificationRequestRepository verificationRequestRepository,
-                               AuditLogService auditLogService, FileService fileService) {
+                               AuditLogService auditLogService, FileService fileService,
+                               AppMetricsService appMetricsService) {
         this.userRepository = userRepository;
         this.userProfileRepository = userProfileRepository;
         this.verificationRequestRepository = verificationRequestRepository;
         this.auditLogService = auditLogService;
         this.fileService = fileService;
+        this.appMetricsService = appMetricsService;
     }
 
     // ──────────────────────────────────────────────
@@ -138,6 +142,7 @@ public class VerificationService {
         submitMetadata.put("documentContentType", document.getContentType());
         submitMetadata.put("documentSize", document.getSize());
         auditLogService.log("verification_submitted", user.getId(), submitMetadata);
+        appMetricsService.incrementVerificationRequests();
 
         return new SubmitVerificationResponse(
                 verificationRequest.getId().toString(),
@@ -253,6 +258,11 @@ public class VerificationService {
         reviewMetadata.put("reviewNotes", request.getReviewNotes() != null ? request.getReviewNotes() : "");
         reviewMetadata.put("subjectUserId", verificationRequest.getUserId());
         auditLogService.log(action, admin.getId(), reviewMetadata);
+        if (decision == VerificationStatus.APPROVED) {
+            appMetricsService.incrementVerificationApprovals();
+        } else {
+            appMetricsService.incrementVerificationRejections();
+        }
 
         return new ReviewVerificationResponse(
                 requestId.toString(),

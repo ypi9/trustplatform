@@ -43,7 +43,16 @@ public class SecurityConfig {
                 .accessDeniedHandler(accessDeniedHandler)
             )
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/auth/signup", "/auth/login", "/health", "/live", "/ready").permitAll()
+                .requestMatchers(
+                    "/auth/signup",
+                    "/auth/login",
+                    "/health",
+                    "/live",
+                    "/ready",
+                    "/actuator/health",
+                    "/actuator/metrics",
+                    "/actuator/metrics/**"
+                ).permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

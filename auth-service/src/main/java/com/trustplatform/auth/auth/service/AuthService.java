@@ -4,6 +4,7 @@ import com.trustplatform.auth.audit.service.AuditLogService;
 import com.trustplatform.auth.auth.dto.response.AuthResponse;
 import com.trustplatform.auth.auth.dto.request.LoginRequest;
 import com.trustplatform.auth.auth.dto.request.SignupRequest;
+import com.trustplatform.auth.common.metrics.AppMetricsService;
 import com.trustplatform.auth.user.dto.response.UserResponse;
 import com.trustplatform.auth.user.entity.User;
 import com.trustplatform.auth.user.entity.UserProfile;
@@ -29,14 +30,17 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuditLogService auditLogService;
+    private final AppMetricsService appMetricsService;
 
     public AuthService(UserRepository userRepository, UserProfileRepository userProfileRepository,
-                       PasswordEncoder passwordEncoder, JwtService jwtService, AuditLogService auditLogService) {
+                       PasswordEncoder passwordEncoder, JwtService jwtService, AuditLogService auditLogService,
+                       AppMetricsService appMetricsService) {
         this.userRepository = userRepository;
         this.userProfileRepository = userProfileRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.auditLogService = auditLogService;
+        this.appMetricsService = appMetricsService;
     }
 
     @Transactional
@@ -92,6 +96,7 @@ public class AuthService {
         metadata.put("email", normalizedEmail);
         metadata.put("role", user.getRole());
         auditLogService.log("login_success", user.getId(), metadata);
+        appMetricsService.incrementLogins();
 
         String token = jwtService.generateToken(user);
         return new AuthResponse(token);

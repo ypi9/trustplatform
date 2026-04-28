@@ -203,6 +203,13 @@ public class VerificationFlowIntegrationTest {
                 .andExpect(jsonPath("$.accessToken").exists());
     }
 
+    @Test @Order(7)
+    void actuatorHealthIsPublic() throws Exception {
+        mockMvc.perform(get("/actuator/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
+    }
+
     // ══════════════════════════════════════════════
     //  FLOW A: Upload → Submit → Approve → VERIFIED
     // ══════════════════════════════════════════════
@@ -667,6 +674,29 @@ public class VerificationFlowIntegrationTest {
                 .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray());
+    }
+
+    @Test @Order(63)
+    void actuatorMetricsExposeCustomCounters() throws Exception {
+        mockMvc.perform(get("/actuator/metrics/trustplatform.auth.logins"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("trustplatform.auth.logins"))
+                .andExpect(jsonPath("$.measurements[0].value").isNumber());
+
+        mockMvc.perform(get("/actuator/metrics/trustplatform.verification.requests"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("trustplatform.verification.requests"))
+                .andExpect(jsonPath("$.measurements[0].value").isNumber());
+
+        mockMvc.perform(get("/actuator/metrics/trustplatform.verification.approvals"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("trustplatform.verification.approvals"))
+                .andExpect(jsonPath("$.measurements[0].value").isNumber());
+
+        mockMvc.perform(get("/actuator/metrics/trustplatform.verification.rejections"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("trustplatform.verification.rejections"))
+                .andExpect(jsonPath("$.measurements[0].value").isNumber());
     }
 
     @TestConfiguration

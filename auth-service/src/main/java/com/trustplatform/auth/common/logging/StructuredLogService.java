@@ -16,6 +16,7 @@ public class StructuredLogService {
 
     private static final Logger eventLogger = LoggerFactory.getLogger("trustplatform.events");
     private static final Logger requestLogger = LoggerFactory.getLogger("trustplatform.requests");
+    private static final Logger slowRequestLogger = LoggerFactory.getLogger("trustplatform.requests.slow");
 
     private final ObjectMapper objectMapper;
 
@@ -54,6 +55,22 @@ public class StructuredLogService {
                 "INFO",
                 "request_completed",
                 "Request completed",
+                userId,
+                metadata
+        )));
+    }
+
+    public void logSlowRequest(String method, String path, int status, long durationMs, long thresholdMs, UUID userId) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("method", method);
+        metadata.put("path", path);
+        metadata.put("status", status);
+        metadata.put("durationMs", durationMs);
+        metadata.put("slowThresholdMs", thresholdMs);
+        slowRequestLogger.warn("{}", toJson(buildPayload(
+                "WARN",
+                "slow_request",
+                "Slow request detected",
                 userId,
                 metadata
         )));
