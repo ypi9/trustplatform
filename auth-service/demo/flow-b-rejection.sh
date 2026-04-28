@@ -101,7 +101,7 @@ check_health
 print_step "1" "Logging in admin"
 request_json POST /auth/login "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}"
 expect_status 200
-ADMIN_TOKEN="$(printf '%s\n' "$RESPONSE_BODY" | jq -r '.accessToken')"
+ADMIN_TOKEN="$(printf '%s\n' "$RESPONSE_BODY" | jq -r '.data.accessToken')"
 
 print_step "2" "Registering rejection-flow user $REJECT_USER_EMAIL"
 request_json POST /auth/signup "{\"email\":\"$REJECT_USER_EMAIL\",\"password\":\"$REJECT_USER_PASSWORD\"}"
@@ -111,20 +111,20 @@ print_body
 print_step "3" "Logging in rejection-flow user"
 request_json POST /auth/login "{\"email\":\"$REJECT_USER_EMAIL\",\"password\":\"$REJECT_USER_PASSWORD\"}"
 expect_status 200
-USER_TOKEN="$(printf '%s\n' "$RESPONSE_BODY" | jq -r '.accessToken')"
+USER_TOKEN="$(printf '%s\n' "$RESPONSE_BODY" | jq -r '.data.accessToken')"
 
 print_step "4" "Uploading demo document"
 request_upload "$USER_TOKEN"
 expect_status 200
 print_body
-DOCUMENT_KEY="$(printf '%s\n' "$RESPONSE_BODY" | jq -r '.objectKey')"
-UPLOAD_REQUEST_ID="$(printf '%s\n' "$RESPONSE_BODY" | jq -r '.requestId')"
+DOCUMENT_KEY="$(printf '%s\n' "$RESPONSE_BODY" | jq -r '.data.objectKey')"
+UPLOAD_REQUEST_ID="$(printf '%s\n' "$RESPONSE_BODY" | jq -r '.data.requestId')"
 
 print_step "5" "Submitting verification"
 request_json POST /verification/submit "{\"documentKey\":\"$DOCUMENT_KEY\",\"requestId\":\"$UPLOAD_REQUEST_ID\"}" "$USER_TOKEN"
 expect_status 200
 print_body
-VERIFICATION_REQUEST_ID="$(printf '%s\n' "$RESPONSE_BODY" | jq -r '.requestId')"
+VERIFICATION_REQUEST_ID="$(printf '%s\n' "$RESPONSE_BODY" | jq -r '.data.requestId')"
 
 print_step "6" "Rejecting verification as admin"
 request_json POST /verification/review "{\"requestId\":\"$VERIFICATION_REQUEST_ID\",\"decision\":\"REJECTED\",\"reviewNotes\":\"Demo rejection\"}" "$ADMIN_TOKEN"

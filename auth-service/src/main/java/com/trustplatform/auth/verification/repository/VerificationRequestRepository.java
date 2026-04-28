@@ -2,6 +2,8 @@ package com.trustplatform.auth.verification.repository;
 
 import com.trustplatform.auth.verification.entity.VerificationRequest;
 import com.trustplatform.auth.verification.entity.VerificationStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -17,8 +19,8 @@ public interface VerificationRequestRepository extends JpaRepository<Verificatio
     Optional<VerificationRequest> findTopByUserIdOrderByCreatedAtDesc(UUID userId);
 
     // Get all requests, newest first
-    List<VerificationRequest> findAllByOrderByCreatedAtDesc();
+    Page<VerificationRequest> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
     // Filter by status, newest first
-    List<VerificationRequest> findByStatusOrderByCreatedAtDesc(VerificationStatus status);
+    Page<VerificationRequest> findByStatusOrderByCreatedAtDesc(VerificationStatus status, Pageable pageable);
 }

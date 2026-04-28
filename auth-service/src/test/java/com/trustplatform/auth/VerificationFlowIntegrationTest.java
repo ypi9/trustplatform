@@ -132,11 +132,11 @@ public class VerificationFlowIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\": \"" + ADMIN_EMAIL + "\", \"password\": \"" + PASSWORD + "\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken").exists())
+                .andExpect(jsonPath("$.data.accessToken").exists())
                 .andReturn();
 
         adminToken = objectMapper.readTree(result.getResponse().getContentAsString())
-                .get("accessToken").asText();
+                .get("data").get("accessToken").asText();
 
         String adminUserId = jdbcTemplate.queryForObject(
                 "SELECT id::text FROM users WHERE email = ?",
@@ -164,11 +164,11 @@ public class VerificationFlowIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\": \"" + USER_EMAIL + "\", \"password\": \"" + PASSWORD + "\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken").exists())
+                .andExpect(jsonPath("$.data.accessToken").exists())
                 .andReturn();
 
         userToken = objectMapper.readTree(result.getResponse().getContentAsString())
-                .get("accessToken").asText();
+                .get("data").get("accessToken").asText();
 
         String userId = jdbcTemplate.queryForObject(
                 "SELECT id::text FROM users WHERE email = ?",
@@ -200,7 +200,7 @@ public class VerificationFlowIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"email\": \"" + USER_EMAIL.toUpperCase() + "\", \"password\": \"" + PASSWORD + "\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken").exists());
+                .andExpect(jsonPath("$.data.accessToken").exists());
     }
 
     @Test @Order(7)
@@ -219,8 +219,8 @@ public class VerificationFlowIntegrationTest {
         mockMvc.perform(get("/auth/me")
                 .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.verified").value(false))
-                .andExpect(jsonPath("$.verificationLevel").value("NONE"));
+                .andExpect(jsonPath("$.data.verified").value(false))
+                .andExpect(jsonPath("$.data.verificationLevel").value("NONE"));
     }
 
     @Test @Order(11)
@@ -232,18 +232,19 @@ public class VerificationFlowIntegrationTest {
                 .file(file)
                 .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.fileUrl").exists())
-                .andExpect(jsonPath("$.objectKey").exists())
-                .andExpect(jsonPath("$.requestId").exists())
-                .andExpect(jsonPath("$.bucket").value("test-bucket"))
-                .andExpect(jsonPath("$.contentType").value("image/png"))
-                .andExpect(jsonPath("$.size").value(PNG_BYTES.length))
+                .andExpect(jsonPath("$.data.fileUrl").exists())
+                .andExpect(jsonPath("$.data.objectKey").exists())
+                .andExpect(jsonPath("$.data.requestId").exists())
+                .andExpect(jsonPath("$.data.bucket").value("test-bucket"))
+                .andExpect(jsonPath("$.data.contentType").value("image/png"))
+                .andExpect(jsonPath("$.data.size").value(PNG_BYTES.length))
                 .andReturn();
 
         var uploadJson = objectMapper.readTree(result.getResponse().getContentAsString());
-        fileUrl = uploadJson.get("fileUrl").asText();
-        String objectKey = uploadJson.get("objectKey").asText();
-        String uploadRequestId = uploadJson.get("requestId").asText();
+        var data = uploadJson.get("data");
+        fileUrl = data.get("fileUrl").asText();
+        String objectKey = data.get("objectKey").asText();
+        String uploadRequestId = data.get("requestId").asText();
         Assertions.assertEquals(objectKey, fileUrl);
         Assertions.assertTrue(fileUrl.startsWith("verification/"));
         Assertions.assertTrue(fileUrl.contains("/" + uploadRequestId + "/"));
@@ -258,17 +259,17 @@ public class VerificationFlowIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"documentKey\": \"" + fileUrl + "\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.requestId").exists())
-                .andExpect(jsonPath("$.status").value("PENDING"))
-                .andExpect(jsonPath("$.documentKey").value(fileUrl))
-                .andExpect(jsonPath("$.documentOriginalName").value("id-card.png"))
-                .andExpect(jsonPath("$.documentContentType").value("image/png"))
-                .andExpect(jsonPath("$.documentSize").value(PNG_BYTES.length))
-                .andExpect(jsonPath("$.documentUrl").value(fileUrl))
+                .andExpect(jsonPath("$.data.requestId").exists())
+                .andExpect(jsonPath("$.data.status").value("PENDING"))
+                .andExpect(jsonPath("$.data.documentKey").value(fileUrl))
+                .andExpect(jsonPath("$.data.documentOriginalName").value("id-card.png"))
+                .andExpect(jsonPath("$.data.documentContentType").value("image/png"))
+                .andExpect(jsonPath("$.data.documentSize").value(PNG_BYTES.length))
+                .andExpect(jsonPath("$.data.documentUrl").value(fileUrl))
                 .andReturn();
 
         requestId = objectMapper.readTree(result.getResponse().getContentAsString())
-                .get("requestId").asText();
+                .get("data").get("requestId").asText();
     }
 
     @Test @Order(13)
@@ -293,8 +294,8 @@ public class VerificationFlowIntegrationTest {
         mockMvc.perform(get("/verification/status")
                 .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.verificationLevel").value("PENDING"))
-                .andExpect(jsonPath("$.latestRequest.status").value("PENDING"));
+                .andExpect(jsonPath("$.data.verificationLevel").value("PENDING"))
+                .andExpect(jsonPath("$.data.latestRequest.status").value("PENDING"));
     }
 
     @Test @Order(15)
@@ -345,9 +346,12 @@ public class VerificationFlowIntegrationTest {
         mockMvc.perform(get("/verification/requests").param("status", "PENDING")
                 .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray())
-                .andExpect(jsonPath("$[?(@.requestId == '" + requestId + "')]").exists())
-                .andExpect(jsonPath("$[?(@.documentKey == '" + fileUrl + "')]").exists());
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data[?(@.requestId == '" + requestId + "')]").exists())
+                .andExpect(jsonPath("$.data[?(@.documentKey == '" + fileUrl + "')]").exists())
+                .andExpect(jsonPath("$.pagination.page").value(0))
+                .andExpect(jsonPath("$.pagination.size").value(20));
     }
 
     @Test @Order(20)
@@ -355,8 +359,8 @@ public class VerificationFlowIntegrationTest {
         mockMvc.perform(get("/verification/requests/" + requestId + "/document-link")
                 .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.requestId").value(requestId))
-                .andExpect(jsonPath("$.downloadUrl").value("https://example.test/presigned/" + fileUrl));
+                .andExpect(jsonPath("$.data.requestId").value(requestId))
+                .andExpect(jsonPath("$.data.downloadUrl").value("https://example.test/presigned/" + fileUrl));
     }
 
     @Test @Order(21)
@@ -368,10 +372,10 @@ public class VerificationFlowIntegrationTest {
                         + "\", \"decision\": \"APPROVED\""
                         + ", \"reviewNotes\": \"Document looks good\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("APPROVED"))
-                .andExpect(jsonPath("$.userVerificationLevel").value("VERIFIED"))
-                .andExpect(jsonPath("$.reviewNotes").value("Document looks good"))
-                .andExpect(jsonPath("$.reviewedAt").exists());
+                .andExpect(jsonPath("$.data.status").value("APPROVED"))
+                .andExpect(jsonPath("$.data.userVerificationLevel").value("VERIFIED"))
+                .andExpect(jsonPath("$.data.reviewNotes").value("Document looks good"))
+                .andExpect(jsonPath("$.data.reviewedAt").exists());
     }
 
     @Test @Order(22)
@@ -379,8 +383,8 @@ public class VerificationFlowIntegrationTest {
         mockMvc.perform(get("/auth/me")
                 .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.verified").value(true))
-                .andExpect(jsonPath("$.verificationLevel").value("VERIFIED"));
+                .andExpect(jsonPath("$.data.verified").value(true))
+                .andExpect(jsonPath("$.data.verificationLevel").value("VERIFIED"));
     }
 
     @Test @Order(23)
@@ -424,7 +428,7 @@ public class VerificationFlowIntegrationTest {
                 .andReturn();
 
         secondUserToken = objectMapper.readTree(result.getResponse().getContentAsString())
-                .get("accessToken").asText();
+                .get("data").get("accessToken").asText();
     }
 
     @Test @Order(32)
@@ -436,11 +440,11 @@ public class VerificationFlowIntegrationTest {
                 .file(file)
                 .header("Authorization", "Bearer " + secondUserToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.fileUrl").exists())
+                .andExpect(jsonPath("$.data.fileUrl").exists())
                 .andReturn();
 
         secondFileUrl = objectMapper.readTree(result.getResponse().getContentAsString())
-                .get("fileUrl").asText();
+                .get("data").get("fileUrl").asText();
     }
 
     @Test @Order(33)
@@ -450,11 +454,11 @@ public class VerificationFlowIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"documentKey\": \"" + secondFileUrl + "\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.data.status").value("PENDING"))
                 .andReturn();
 
         secondRequestId = objectMapper.readTree(result.getResponse().getContentAsString())
-                .get("requestId").asText();
+                .get("data").get("requestId").asText();
     }
 
     @Test @Order(34)
@@ -466,9 +470,9 @@ public class VerificationFlowIntegrationTest {
                         + "\", \"decision\": \"REJECTED\""
                         + ", \"reviewNotes\": \"Blurry document\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("REJECTED"))
-                .andExpect(jsonPath("$.userVerificationLevel").value("REJECTED"))
-                .andExpect(jsonPath("$.reviewNotes").value("Blurry document"));
+                .andExpect(jsonPath("$.data.status").value("REJECTED"))
+                .andExpect(jsonPath("$.data.userVerificationLevel").value("REJECTED"))
+                .andExpect(jsonPath("$.data.reviewNotes").value("Blurry document"));
     }
 
     @Test @Order(35)
@@ -476,8 +480,8 @@ public class VerificationFlowIntegrationTest {
         mockMvc.perform(get("/auth/me")
                 .header("Authorization", "Bearer " + secondUserToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.verified").value(false))
-                .andExpect(jsonPath("$.verificationLevel").value("REJECTED"));
+                .andExpect(jsonPath("$.data.verified").value(false))
+                .andExpect(jsonPath("$.data.verificationLevel").value("REJECTED"));
     }
 
     // ══════════════════════════════════════════════
@@ -496,7 +500,7 @@ public class VerificationFlowIntegrationTest {
                 .andReturn();
 
         secondFileUrl = objectMapper.readTree(result.getResponse().getContentAsString())
-                .get("fileUrl").asText();
+                .get("data").get("fileUrl").asText();
     }
 
     @Test @Order(41)
@@ -506,11 +510,11 @@ public class VerificationFlowIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"documentKey\": \"" + secondFileUrl + "\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("PENDING"))
+                .andExpect(jsonPath("$.data.status").value("PENDING"))
                 .andReturn();
 
         secondRequestId = objectMapper.readTree(result.getResponse().getContentAsString())
-                .get("requestId").asText();
+                .get("data").get("requestId").asText();
     }
 
     @Test @Order(42)
@@ -518,8 +522,8 @@ public class VerificationFlowIntegrationTest {
         mockMvc.perform(get("/auth/me")
                 .header("Authorization", "Bearer " + secondUserToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.verified").value(false))
-                .andExpect(jsonPath("$.verificationLevel").value("PENDING"));
+                .andExpect(jsonPath("$.data.verified").value(false))
+                .andExpect(jsonPath("$.data.verificationLevel").value("PENDING"));
     }
 
     // ══════════════════════════════════════════════
@@ -673,7 +677,23 @@ public class VerificationFlowIntegrationTest {
         mockMvc.perform(get("/verification/requests")
                 .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray());
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.pagination.totalElements").isNumber());
+    }
+
+    @Test @Order(62)
+    void adminListSupportsPagination() throws Exception {
+        mockMvc.perform(get("/verification/requests")
+                .param("page", "0")
+                .param("size", "1")
+                .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.pagination.page").value(0))
+                .andExpect(jsonPath("$.pagination.size").value(1))
+                .andExpect(jsonPath("$.pagination.hasNext").isBoolean());
     }
 
     @Test @Order(63)

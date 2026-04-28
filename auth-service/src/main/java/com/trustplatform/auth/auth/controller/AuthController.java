@@ -5,6 +5,8 @@ import com.trustplatform.auth.auth.dto.request.LoginRequest;
 import com.trustplatform.auth.auth.dto.request.SignupRequest;
 import com.trustplatform.auth.user.dto.response.UserResponse;
 import com.trustplatform.auth.auth.service.AuthService;
+import com.trustplatform.auth.common.api.ApiSuccessResponse;
+import com.trustplatform.auth.common.api.ApiSuccessResponseFactory;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,26 +18,28 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+    private final ApiSuccessResponseFactory successResponseFactory;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, ApiSuccessResponseFactory successResponseFactory) {
         this.authService = authService;
+        this.successResponseFactory = successResponseFactory;
     }
 
     @PostMapping("/signup")
-    public ResponseEntity<String> signup(@Valid @RequestBody SignupRequest request) {
+    public ResponseEntity<ApiSuccessResponse<String>> signup(@Valid @RequestBody SignupRequest request) {
         String message = authService.signup(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(message);
+        return ResponseEntity.status(HttpStatus.CREATED).body(successResponseFactory.build(message));
     }
 
     @PostMapping("/login")
-    public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
+    public ResponseEntity<ApiSuccessResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {
         AuthResponse response = authService.login(request);
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(successResponseFactory.build(response));
     }
 
     @GetMapping("/me")
-    public ResponseEntity<UserResponse> me(Authentication authentication) {
+    public ResponseEntity<ApiSuccessResponse<UserResponse>> me(Authentication authentication) {
         UserResponse response = authService.getProfile(authentication.getName());
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(successResponseFactory.build(response));
     }
 }

@@ -18,6 +18,8 @@ import com.trustplatform.auth.user.repository.UserProfileRepository;
 import com.trustplatform.auth.user.repository.UserRepository;
 import com.trustplatform.auth.verification.repository.VerificationRequestRepository;
 import com.trustplatform.auth.storage.dto.S3UploadResult;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -276,8 +278,16 @@ public class VerificationService {
     // ──────────────────────────────────────────────
     // LIST: Admin lists verification requests
     // ──────────────────────────────────────────────
-    public List<VerificationRequestItem> listRequests(String status) {
-        List<VerificationRequest> requests;
+    public Page<VerificationRequestItem> listRequests(String status, int page, int size) {
+        if (page < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "page must be greater than or equal to 0");
+        }
+        if (size < 1 || size > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "size must be between 1 and 100");
+        }
+
+        var pageable = PageRequest.of(page, size);
+        Page<VerificationRequest> requests;
 
         if (status != null && !status.isBlank()) {
             VerificationStatus filterStatus;
@@ -287,12 +297,12 @@ public class VerificationService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Invalid status filter: " + status + ". Must be PENDING, APPROVED, or REJECTED");
             }
-            requests = verificationRequestRepository.findByStatusOrderByCreatedAtDesc(filterStatus);
+            requests = verificationRequestRepository.findByStatusOrderByCreatedAtDesc(filterStatus, pageable);
         } else {
-            requests = verificationRequestRepository.findAllByOrderByCreatedAtDesc();
+            requests = verificationRequestRepository.findAllByOrderByCreatedAtDesc(pageable);
         }
 
-        return requests.stream().map(req -> new VerificationRequestItem(
+        return requests.map(req -> new VerificationRequestItem(
                 req.getId().toString(),
                 req.getUserId().toString(),
                 req.getStatus().name(),
@@ -303,7 +313,7 @@ public class VerificationService {
                 req.getDocumentUrl(),
                 req.getCreatedAt().toString(),
                 req.getReviewedAt() != null ? req.getReviewedAt().toString() : null
-        )).toList();
+        ));
     }
 
     public VerificationDocumentLinkResponse generateDocumentLink(String requestId, String adminEmail) {
