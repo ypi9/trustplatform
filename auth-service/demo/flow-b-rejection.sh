@@ -24,6 +24,28 @@ print_step() {
   printf '\n[%s] %s\n' "$1" "$2"
 }
 
+print_body() {
+  if printf '%s' "$RESPONSE_BODY" | jq empty >/dev/null 2>&1; then
+    printf '%s\n' "$RESPONSE_BODY" | jq .
+  else
+    printf '%s\n' "$RESPONSE_BODY"
+  fi
+}
+
+check_health() {
+  print_step "0" "Checking /health"
+  request_json GET /health
+  expect_status 200
+  print_body
+  if printf '%s' "$RESPONSE_BODY" | jq empty >/dev/null 2>&1; then
+    if [[ "$(printf '%s' "$RESPONSE_BODY" | jq -r '.s3 // empty')" == "DOWN" ]]; then
+      echo "S3 is DOWN at $BASE_URL. This verification demo needs a configured S3-backed environment." >&2
+      echo "Point BASE_URL to a cloud deployment or configure AWS locally, then rerun." >&2
+      exit 1
+    fi
+  fi
+}
+
 request_json() {
   local method="$1"
   local path="$2"
@@ -74,6 +96,8 @@ expect_status() {
   fi
 }
 
+check_health
+
 print_step "1" "Logging in admin"
 request_json POST /auth/login "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}"
 expect_status 200
@@ -82,7 +106,7 @@ ADMIN_TOKEN="$(printf '%s\n' "$RESPONSE_BODY" | jq -r '.accessToken')"
 print_step "2" "Registering rejection-flow user $REJECT_USER_EMAIL"
 request_json POST /auth/signup "{\"email\":\"$REJECT_USER_EMAIL\",\"password\":\"$REJECT_USER_PASSWORD\"}"
 expect_status 201
-printf '%s\n' "$RESPONSE_BODY" | jq .
+print_body
 
 print_step "3" "Logging in rejection-flow user"
 request_json POST /auth/login "{\"email\":\"$REJECT_USER_EMAIL\",\"password\":\"$REJECT_USER_PASSWORD\"}"
@@ -92,29 +116,29 @@ USER_TOKEN="$(printf '%s\n' "$RESPONSE_BODY" | jq -r '.accessToken')"
 print_step "4" "Uploading demo document"
 request_upload "$USER_TOKEN"
 expect_status 200
-printf '%s\n' "$RESPONSE_BODY" | jq .
+print_body
 DOCUMENT_KEY="$(printf '%s\n' "$RESPONSE_BODY" | jq -r '.objectKey')"
 UPLOAD_REQUEST_ID="$(printf '%s\n' "$RESPONSE_BODY" | jq -r '.requestId')"
 
 print_step "5" "Submitting verification"
 request_json POST /verification/submit "{\"documentKey\":\"$DOCUMENT_KEY\",\"requestId\":\"$UPLOAD_REQUEST_ID\"}" "$USER_TOKEN"
 expect_status 200
-printf '%s\n' "$RESPONSE_BODY" | jq .
+print_body
 VERIFICATION_REQUEST_ID="$(printf '%s\n' "$RESPONSE_BODY" | jq -r '.requestId')"
 
 print_step "6" "Rejecting verification as admin"
 request_json POST /verification/review "{\"requestId\":\"$VERIFICATION_REQUEST_ID\",\"decision\":\"REJECTED\",\"reviewNotes\":\"Demo rejection\"}" "$ADMIN_TOKEN"
 expect_status 200
-printf '%s\n' "$RESPONSE_BODY" | jq .
+print_body
 
 print_step "7" "Checking user verification status"
 request_json GET /verification/status "" "$USER_TOKEN"
 expect_status 200
-printf '%s\n' "$RESPONSE_BODY" | jq .
+print_body
 
 print_step "8" "Checking user profile"
 request_json GET /auth/me "" "$USER_TOKEN"
 expect_status 200
-printf '%s\n' "$RESPONSE_BODY" | jq .
+print_body
 
 printf '\nFlow B complete for %s\n' "$REJECT_USER_EMAIL"

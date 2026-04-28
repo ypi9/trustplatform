@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
+import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.*;
@@ -102,6 +103,14 @@ public class S3StorageService {
                     e);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Could not store file. Please try again.");
+        } catch (SdkException e) {
+            log.error("S3 SDK upload failed for bucket '{}' key '{}': {}",
+                    bucketName,
+                    objectKey,
+                    e.getMessage(),
+                    e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Could not store file. Please verify S3 configuration and try again.");
         }
 
         log.info("Uploaded file '{}' to S3 bucket '{}' with key '{}'", originalFilename, bucketName, objectKey);
@@ -151,6 +160,11 @@ public class S3StorageService {
                     bucketName, normalizedKey, e.getMessage());
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Could not verify uploaded file. Please try again.");
+        } catch (SdkException e) {
+            log.warn("S3 SDK metadata lookup failed for bucket '{}' key '{}': {}",
+                    bucketName, normalizedKey, e.getMessage());
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Could not verify uploaded file. Please verify S3 configuration and try again.");
         }
     }
 
@@ -273,6 +287,9 @@ public class S3StorageService {
         } catch (S3Exception e) {
             log.error("S3 error accessing bucket '{}': {}", bucketName, e.getMessage());
             return errorInfo(e.getMessage());
+        } catch (SdkException e) {
+            log.error("S3 SDK error accessing bucket '{}': {}", bucketName, e.getMessage());
+            return errorInfo(e.getMessage());
         }
     }
 
@@ -287,6 +304,9 @@ public class S3StorageService {
             return true;
         } catch (S3Exception e) {
             log.warn("S3 bucket '{}' is not accessible: {}", bucketName, e.getMessage());
+            return false;
+        } catch (SdkException e) {
+            log.warn("S3 bucket '{}' health check failed: {}", bucketName, e.getMessage());
             return false;
         }
     }
