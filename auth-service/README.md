@@ -2,9 +2,29 @@
 
 TrustPlatform Auth Service is a Spring Boot backend for authentication and identity verification. It supports user signup and login, private verification-document uploads to S3, verification request submission, and admin review through short-lived presigned links.
 
+## Project description
+
+TrustPlatform is a cloud-based identity verification platform built with Spring Boot, JWT authentication, Amazon RDS PostgreSQL, and private S3 document storage. It demonstrates a realistic admin-review workflow rather than a toy auth API: users register, upload identity documents, submit verification requests, and admins review those documents through short-lived presigned URLs.
+
 ## Architecture
 
 The current system is a single Spring Boot service that owns authentication, verification workflow, document storage integration, and admin review APIs. It is deployed as one unit to AWS Elastic Beanstalk and integrates with RDS PostgreSQL for relational state and S3 for private document storage.
+
+### System diagram
+
+```text
+Client / Browser / Postman / curl
+                |
+                v
+      Spring Boot API (Elastic Beanstalk)
+                |
+        +-------+-------+
+        |               |
+        v               v
+ RDS PostgreSQL       Amazon S3
+ (users, requests,    (private verification
+ audit logs)          documents)
+```
 
 ### Components
 
@@ -131,6 +151,37 @@ User registers -> logs in -> uploads document -> submits verification
 - Introduce asynchronous events or queues for audit fan-out, notification delivery, and heavier admin processing.
 - Add stronger token lifecycle controls such as refresh tokens, revocation, or short-lived access tokens with rotation.
 - Move from simple monolith pagination and listing toward richer admin search, filtering, and reporting APIs as operational load increases.
+
+## Interview readiness
+
+### How to explain the architecture
+
+- The service is a cloud-deployed Spring Boot monolith that owns authentication, verification workflow, admin review APIs, and storage integration in one place.
+- PostgreSQL stores relational business state such as users, profiles, verification requests, and audit logs.
+- S3 stores private document files, while the database stores only S3 object keys and metadata.
+- Admins never get public document URLs; the API generates short-lived presigned links when review access is needed.
+
+### How to explain the scaling plan
+
+- The first scaling step is horizontal API scaling behind Elastic Beanstalk because the service is stateless at the HTTP layer due to JWT auth.
+- PostgreSQL remains the source of truth for transactional state, and S3 already scales independently for document storage.
+- If load grows, the likely next moves are read/write tuning for RDS, caching, async workflows for audit and notifications, and eventually splitting verification or storage-heavy concerns into separate services.
+
+### How to explain the security design
+
+- Passwords are hashed with BCrypt and never stored in plain text.
+- Protected endpoints use Bearer JWTs validated on each request.
+- Role-based access control is enforced for admin-only review and request-listing endpoints.
+- Verification documents stay private in S3, and document access is granted through short-lived presigned URLs rather than public object access.
+- Health checks, structured logging, request correlation, and audit logs improve operational visibility without exposing private files.
+
+### How to explain the tradeoffs
+
+- I chose a monolith first to optimize for delivery speed, workflow correctness, and easier debugging.
+- I chose JWT over server-side sessions to keep the API stateless and easy to scale.
+- I chose RDS PostgreSQL because the domain is strongly relational and needs transactional consistency.
+- I chose S3 for documents because file storage and relational storage have very different needs.
+- The tradeoff is that cloud integration adds more configuration complexity up front, but it makes the system much more realistic and production-oriented.
 
 ## Tech stack
 
@@ -283,6 +334,19 @@ Important properties come from environment variables:
 - `BOOTSTRAP_ADMIN_EMAIL`
 
 The current defaults live in [application.yaml](/Users/yixupi/VSCode/trustplatform/auth-service/src/main/resources/application.yaml).
+
+## Folder overview
+
+- `src/main/java`:
+  application code
+- `src/main/resources`:
+  Spring configuration
+- `src/test/java`:
+  integration and application tests
+- `postman`:
+  demo-ready Postman collection and environment
+- `demo`:
+  curl-based demo scripts and sample upload document
 
 ## How to test the system
 
