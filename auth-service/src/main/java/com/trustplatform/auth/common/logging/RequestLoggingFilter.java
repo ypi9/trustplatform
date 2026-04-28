@@ -26,18 +26,38 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
         long startedAt = System.currentTimeMillis();
+        String requestId = resolveRequestId(request);
+        RequestCorrelation.setRequestId(requestId);
+        response.setHeader(RequestCorrelation.REQUEST_ID_HEADER, requestId);
+
+        UUID userId = currentUserId();
+        structuredLogService.logRequestReceived(
+                request.getMethod(),
+                request.getRequestURI(),
+                userId
+        );
+
         try {
             filterChain.doFilter(request, response);
         } finally {
             long durationMs = System.currentTimeMillis() - startedAt;
-            structuredLogService.logRequest(
+            structuredLogService.logRequestCompleted(
                     request.getMethod(),
                     request.getRequestURI(),
                     response.getStatus(),
                     durationMs,
                     currentUserId()
             );
+            RequestCorrelation.clear();
         }
+    }
+
+    private String resolveRequestId(HttpServletRequest request) {
+        String headerValue = request.getHeader(RequestCorrelation.REQUEST_ID_HEADER);
+        if (headerValue != null && !headerValue.isBlank()) {
+            return headerValue.strip();
+        }
+        return UUID.randomUUID().toString();
     }
 
     private UUID currentUserId() {

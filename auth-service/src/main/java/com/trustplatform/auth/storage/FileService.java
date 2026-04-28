@@ -53,7 +53,7 @@ public class FileService {
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("bucket", uploadResult.getBucket());
         metadata.put("objectKey", uploadResult.getObjectKey());
-        metadata.put("requestId", uploadResult.getRequestId());
+        metadata.put("uploadRequestId", uploadResult.getRequestId());
         metadata.put("originalName", uploadResult.getOriginalFilename());
         metadata.put("contentType", uploadResult.getContentType());
         metadata.put("size", uploadResult.getSize());

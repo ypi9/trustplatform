@@ -132,7 +132,7 @@ public class VerificationService {
 
         // Audit log
         Map<String, Object> submitMetadata = new LinkedHashMap<>();
-        submitMetadata.put("requestId", verificationRequest.getId());
+        submitMetadata.put("verificationRequestId", verificationRequest.getId());
         submitMetadata.put("documentKey", document.getObjectKey());
         submitMetadata.put("documentOriginalName", document.getOriginalFilename());
         submitMetadata.put("documentContentType", document.getContentType());
@@ -247,7 +247,7 @@ public class VerificationService {
         var admin = userRepository.findByEmail(reviewerEmail)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Admin user not found"));
         Map<String, Object> reviewMetadata = new LinkedHashMap<>();
-        reviewMetadata.put("requestId", requestId);
+        reviewMetadata.put("verificationRequestId", requestId);
         reviewMetadata.put("decision", decision.name());
         reviewMetadata.put("reviewedBy", reviewerEmail);
         reviewMetadata.put("reviewNotes", request.getReviewNotes() != null ? request.getReviewNotes() : "");
@@ -320,7 +320,7 @@ public class VerificationService {
         var admin = userRepository.findByEmail(adminEmail)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Admin user not found"));
         Map<String, Object> metadata = new LinkedHashMap<>();
-        metadata.put("requestId", request.getId());
+        metadata.put("verificationRequestId", request.getId());
         metadata.put("documentKey", documentKey);
         metadata.put("expiresInSeconds", DOCUMENT_LINK_TTL.toSeconds());
         auditLogService.log("document_link_generated", admin.getId(), metadata);

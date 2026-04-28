@@ -183,6 +183,18 @@ public class VerificationFlowIntegrationTest {
     }
 
     @Test @Order(5)
+    void requestCorrelationIdIsEchoedInResponseHeader() throws Exception {
+        String correlationId = UUID.randomUUID().toString();
+
+        mockMvc.perform(post("/auth/login")
+                .header("X-Request-Id", correlationId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"email\": \"" + USER_EMAIL + "\", \"password\": \"" + PASSWORD + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Request-Id", correlationId));
+    }
+
+    @Test @Order(6)
     void loginIsCaseInsensitiveForEmail() throws Exception {
         mockMvc.perform(post("/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
