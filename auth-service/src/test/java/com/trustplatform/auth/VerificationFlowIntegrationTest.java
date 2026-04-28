@@ -754,6 +754,11 @@ public class VerificationFlowIntegrationTest {
         }
 
         @Override
+        public boolean isBucketAccessible() {
+            return true;
+        }
+
+        @Override
         public boolean isBucketPublicAccessBlocked() {
             return true;
         }

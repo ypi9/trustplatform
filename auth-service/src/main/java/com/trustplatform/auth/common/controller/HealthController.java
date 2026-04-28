@@ -9,7 +9,6 @@ import org.springframework.web.bind.annotation.RestController;
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -25,37 +24,33 @@ public class HealthController {
     }
 
     @GetMapping("/health")
-    public Map<String, Object> health() {
-        return Map.of(
-                "status", "UP",
-                "service", "auth-service",
-                "timestamp", Instant.now().toString()
-        );
+    public ResponseEntity<Map<String, String>> health() {
+        return dependencyHealthResponse(false);
     }
 
     @GetMapping("/ready")
-    public ResponseEntity<Map<String, Object>> ready() {
-        boolean databaseUp = isDatabaseReachable();
-        boolean s3Up = s3StorageService.isBucketAccessible();
-        boolean ready = databaseUp && s3Up;
-
-        Map<String, Object> checks = new LinkedHashMap<>();
-        checks.put("database", databaseUp ? "UP" : "DOWN");
-        checks.put("s3", s3Up ? "UP" : "DOWN");
-
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("status", ready ? "UP" : "DOWN");
-        body.put("service", "auth-service");
-        body.put("checks", checks);
-        body.put("timestamp", Instant.now().toString());
-
-        return ResponseEntity.status(ready ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE)
-                .body(body);
+    public ResponseEntity<Map<String, String>> ready() {
+        return dependencyHealthResponse(true);
     }
 
     @GetMapping("/live")
     public Map<String, String> live() {
         return Map.of("status", "UP");
+    }
+
+    private ResponseEntity<Map<String, String>> dependencyHealthResponse(boolean failWhenDown) {
+        boolean databaseUp = isDatabaseReachable();
+        boolean s3Up = s3StorageService.isBucketAccessible();
+        boolean up = databaseUp && s3Up;
+
+        Map<String, String> body = new LinkedHashMap<>();
+        body.put("status", up ? "UP" : "DOWN");
+        body.put("database", databaseUp ? "UP" : "DOWN");
+        body.put("s3", s3Up ? "UP" : "DOWN");
+
+        HttpStatus status = !up && failWhenDown ? HttpStatus.SERVICE_UNAVAILABLE : HttpStatus.OK;
+        return ResponseEntity.status(status)
+                .body(body);
     }
 
     private boolean isDatabaseReachable() {
