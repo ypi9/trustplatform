@@ -4,6 +4,10 @@ TrustPlatform Auth Service is a Spring Boot backend for authentication and ident
 
 ## Architecture
 
+The current system is a single Spring Boot service that owns authentication, verification workflow, document storage integration, and admin review APIs. It is deployed as one unit to AWS Elastic Beanstalk and integrates with RDS PostgreSQL for relational state and S3 for private document storage.
+
+### Components
+
 ```text
 Client / Postman / curl
           |
@@ -22,7 +26,50 @@ Spring Boot API
                                 - presigned admin review links
 ```
 
-### Verification flow
+### Internal service structure
+
+- `auth`:
+  signup, login, JWT generation, security configuration, authenticated-user principal mapping
+- `user`:
+  user entity, profile entity, repositories, and profile-facing DTOs
+- `verification`:
+  verification state machine, submit/review/list flows, admin decision logic
+- `storage`:
+  file upload validation, S3 object-key handling, metadata lookup, presigned document-link generation
+- `audit`:
+  audit log persistence for important business events
+- `common`:
+  shared logging, error handling, request correlation, health checks, API envelope helpers
+
+The service follows a controller -> service -> repository structure. Controllers stay thin and mostly translate HTTP to application calls. Business rules live in services, and persistence concerns stay in repositories.
+
+### Data flow
+
+```text
+1. Client signs up or logs in through the API
+2. API stores user/profile state in PostgreSQL
+3. Authenticated user uploads a verification document through the API
+4. API validates the file and writes the document to private S3
+5. API stores only the S3 object key and metadata in PostgreSQL
+6. User submits a verification request referencing that stored object key
+7. Admin lists requests from PostgreSQL and asks for a presigned review link
+8. API generates a short-lived S3 URL on demand for the admin
+9. Admin approves or rejects; API updates verification state in PostgreSQL
+```
+
+### Authentication flow
+
+```text
+1. User calls POST /auth/login with email + password
+2. API validates credentials against PostgreSQL
+3. API issues a signed JWT containing user identity and role
+4. Client sends Bearer token on later requests
+5. JwtAuthenticationFilter validates the token on each protected request
+6. Spring Security stores the authenticated principal in the SecurityContext
+7. Controllers and method-level authorization use that principal and role
+```
+
+### Verification workflow
 
 ```text
 User registers -> logs in -> uploads document -> submits verification
@@ -39,22 +86,51 @@ User registers -> logs in -> uploads document -> submits verification
                              profile = VERIFIED    profile = REJECTED
 ```
 
-## Architecture summary
+## Key decisions
 
-- `auth`:
-  JWT auth, login, signup, security config, authenticated user handling
-- `user`:
-  user entities, repositories, and profile response DTOs
-- `verification`:
-  verification workflow, request/review DTOs, admin review flow
-- `storage`:
-  document upload handling and private S3 integration
-- `audit`:
-  audit log persistence for business events
-- `common`:
-  shared exception handling and structured request/event logging
+### Why JWT instead of server-side session auth
 
-The service follows a clean controller -> service -> repository layering. Controllers remain thin; business rules live in services.
+- This service is API-first and deployed behind a load-balanced cloud runtime, so stateless authentication keeps scaling and deployment simpler.
+- JWT avoids server-side session storage and fits well with Postman, curl, browser clients, and future frontend/mobile consumers.
+- Role information travels with the token, which keeps authorization checks straightforward for admin-only endpoints.
+
+### Why S3 for verification documents
+
+- Verification files are binary objects, not relational records, so object storage is a better fit than the database.
+- S3 gives durable storage, predictable scaling, and a clean boundary between metadata in PostgreSQL and document bytes in object storage.
+- Private buckets plus presigned URLs let admins review documents without making files publicly accessible.
+
+### Why RDS PostgreSQL for the database
+
+- The core domain is relational: users, profiles, verification requests, and audit logs have clear structured relationships.
+- PostgreSQL is mature, easy to operate on AWS, and a natural fit for Spring Data JPA and transactional workflow updates.
+- RDS removes a lot of operational overhead for backups, patching, and managed availability compared with self-hosting a database.
+
+### Why start with a monolith
+
+- The first problem to solve is workflow correctness, not service decomposition.
+- One deployable service keeps local development, testing, deployment, and debugging much simpler while the domain is still evolving.
+- Authentication, verification state changes, audit logging, and storage integration are tightly coupled enough at this stage that splitting early would mostly add coordination cost.
+
+## Tradeoffs
+
+- Chose a monolith first for speed and simplicity.
+  This keeps the MVP easier to reason about, but it means scaling and team ownership are shared within one codebase for now.
+- Chose JWT over sessions.
+  This removes server-side session storage, but it also means token revocation and rotation need deliberate handling as the system matures.
+- Chose S3 object storage for documents.
+  This is the right fit for uploaded files, but it introduces cloud configuration, IAM concerns, and cross-service dependency on S3 availability.
+- Chose presigned URLs instead of public document access.
+  This greatly improves privacy and access control, but it adds a little extra complexity for admins because links are generated on demand and expire.
+- Chose RDS PostgreSQL for transactional state.
+  This gives strong consistency and familiar query capabilities, but it also means the service depends on a central relational database for core workflow steps.
+
+## Future evolution
+
+- Split document handling into a dedicated storage or verification service if the workflow grows significantly.
+- Introduce asynchronous events or queues for audit fan-out, notification delivery, and heavier admin processing.
+- Add stronger token lifecycle controls such as refresh tokens, revocation, or short-lived access tokens with rotation.
+- Move from simple monolith pagination and listing toward richer admin search, filtering, and reporting APIs as operational load increases.
 
 ## Tech stack
 
