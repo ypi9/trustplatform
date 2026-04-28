@@ -13,6 +13,7 @@ import com.trustplatform.auth.user.repository.UserProfileRepository;
 import com.trustplatform.auth.user.repository.UserRepository;
 import com.trustplatform.auth.auth.security.JwtService;
 import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,16 +32,19 @@ public class AuthService {
     private final JwtService jwtService;
     private final AuditLogService auditLogService;
     private final AppMetricsService appMetricsService;
+    private final String bootstrapAdminEmail;
 
     public AuthService(UserRepository userRepository, UserProfileRepository userProfileRepository,
                        PasswordEncoder passwordEncoder, JwtService jwtService, AuditLogService auditLogService,
-                       AppMetricsService appMetricsService) {
+                       AppMetricsService appMetricsService,
+                       @Value("${app.bootstrap.admin-email:}") String bootstrapAdminEmail) {
         this.userRepository = userRepository;
         this.userProfileRepository = userProfileRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.auditLogService = auditLogService;
         this.appMetricsService = appMetricsService;
+        this.bootstrapAdminEmail = normalizeOptionalEmail(bootstrapAdminEmail);
     }
 
     @Transactional
@@ -54,7 +58,7 @@ public class AuthService {
         User user = new User();
         user.setEmail(normalizedEmail);
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
-        user.setRole("USER");
+        user.setRole(isBootstrapAdminEmail(normalizedEmail) ? "ADMIN" : "USER");
         userRepository.save(user);
 
         UserProfile profile = new UserProfile();
@@ -119,5 +123,16 @@ public class AuthService {
 
     private String normalizeEmail(String email) {
         return email.strip().toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeOptionalEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return "";
+        }
+        return normalizeEmail(email);
+    }
+
+    private boolean isBootstrapAdminEmail(String email) {
+        return !bootstrapAdminEmail.isBlank() && bootstrapAdminEmail.equals(email);
     }
 }

@@ -1,49 +1,30 @@
 {
   "info": {
     "name": "TrustPlatform Auth Service",
-    "description": "API collection for the TrustPlatform authentication service",
+    "description": "Repeatable demo collection for TrustPlatform Auth Service. Import the companion local environment, set BOOTSTRAP_ADMIN_EMAIL to match {{adminEmail}}, then run the Demo Flow A or Demo Flow B folders top to bottom.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
-  "variable": [
-    {
-      "key": "baseUrl",
-      "value": "http://localhost:8080",
-      "type": "string"
-    },
-    {
-      "key": "accessToken",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "adminToken",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "fileUrl",
-      "value": "verification/<userId>/<requestId>/<uuid>.png",
-      "type": "string"
-    },
-    {
-      "key": "documentKey",
-      "value": "verification/<userId>/<requestId>/<uuid>.png",
-      "type": "string"
-    },
-    {
-      "key": "verificationRequestId",
-      "value": "",
-      "type": "string"
-    }
-  ],
   "item": [
     {
-      "name": "Auth",
+      "name": "Demo Flow A - Happy Path",
+      "description": "Register admin and user, upload a document, submit verification, approve it, and confirm the user becomes VERIFIED.",
       "item": [
         {
-          "name": "Signup",
+          "name": "Health Check",
           "request": {
-            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Register Admin",
+          "request": {
             "method": "POST",
             "header": [
               {
@@ -53,21 +34,37 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\"\n}"
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/auth/signup",
               "host": ["{{baseUrl}}"],
               "path": ["auth", "signup"]
             },
-            "description": "Register a new user with email and password"
+            "description": "Creates the demo admin user. Start the app with BOOTSTRAP_ADMIN_EMAIL={{adminEmail}} so this signup is immediately assigned ADMIN role."
           },
           "response": []
         },
         {
-          "name": "Login",
+          "name": "Login Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Admin login succeeded\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "if (body.accessToken) {",
+                  "  pm.environment.set(\"adminToken\", body.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
-            "auth": { "type": "noauth" },
             "method": "POST",
             "header": [
               {
@@ -77,185 +74,199 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\"\n}"
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/auth/login",
               "host": ["{{baseUrl}}"],
               "path": ["auth", "login"]
-            },
-            "description": "Login with email and password"
+            }
           },
           "response": []
         },
         {
-          "name": "Me (no token)",
+          "name": "Register User",
           "request": {
-            "auth": { "type": "noauth" },
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/auth/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "me"]
-            },
-            "description": "Get current user info without token (should return 401)"
-          },
-          "response": []
-        },
-        {
-          "name": "Me (invalid token)",
-          "request": {
-            "auth": { "type": "noauth" },
-            "method": "GET",
+            "method": "POST",
             "header": [
               {
-                "key": "Authorization",
-                "value": "Bearer invalidtoken"
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
-            "url": {
-              "raw": "{{baseUrl}}/auth/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "me"]
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}"
             },
-            "description": "Get current user info with invalid token (should return 401)"
+            "url": {
+              "raw": "{{baseUrl}}/auth/signup",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "signup"]
+            }
           },
           "response": []
         },
         {
-          "name": "Me (valid token)",
+          "name": "Login User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"User login succeeded\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "if (body.accessToken) {",
+                  "  pm.environment.set(\"accessToken\", body.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
-            "auth": { "type": "noauth" },
-            "method": "GET",
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Upload User Document",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Upload succeeded\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "if (body.objectKey) {",
+                  "  pm.environment.set(\"documentKey\", body.objectKey);",
+                  "  pm.environment.set(\"fileUrl\", body.fileUrl || body.objectKey);",
+                  "}",
+                  "if (body.requestId) {",
+                  "  pm.environment.set(\"uploadRequestId\", body.requestId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
             "header": [
               {
                 "key": "Authorization",
                 "value": "Bearer {{accessToken}}"
               }
             ],
-            "url": {
-              "raw": "{{baseUrl}}/auth/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "me"]
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Select auth-service/demo/sample-document.pdf"
+                }
+              ]
             },
-            "description": "Get current user info with valid token (set accessToken variable from login response)"
+            "url": {
+              "raw": "{{baseUrl}}/files/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["files", "upload"]
+            }
           },
           "response": []
         },
         {
-          "name": "Get Document Link",
+          "name": "Submit Verification",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Verification submit succeeded\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "if (body.requestId) {",
+                  "  pm.environment.set(\"verificationRequestId\", body.requestId);",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
-            "auth": { "type": "noauth" },
-            "method": "GET",
+            "method": "POST",
             "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentKey\": \"{{documentKey}}\",\n  \"requestId\": \"{{uploadRequestId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/verification/submit",
+              "host": ["{{baseUrl}}"],
+              "path": ["verification", "submit"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Admin Approve Verification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
               {
                 "key": "Authorization",
                 "value": "Bearer {{adminToken}}"
               }
             ],
-            "url": {
-              "raw": "{{baseUrl}}/verification/requests/{{verificationRequestId}}/document-link",
-              "host": ["{{baseUrl}}"],
-              "path": ["verification", "requests", "{{verificationRequestId}}", "document-link"]
-            },
-            "description": "Generate a short-lived presigned S3 GET URL for the request document. Admin only; URL is generated on demand and not stored."
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Verification",
-      "item": [
-        {
-          "name": "Submit Verification (success)",
-          "request": {
-            "auth": { "type": "noauth" },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"documentKey\": \"{{documentKey}}\"\n}"
+              "raw": "{\n  \"requestId\": \"{{verificationRequestId}}\",\n  \"decision\": \"APPROVED\",\n  \"reviewNotes\": \"Demo approval\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/verification/submit",
+              "raw": "{{baseUrl}}/verification/review",
               "host": ["{{baseUrl}}"],
-              "path": ["verification", "submit"]
-            },
-            "description": "Submit a verification request using the S3 object key returned by /files/upload in documentKey (expects 200 with requestId + PENDING)."
+              "path": ["verification", "review"]
+            }
           },
           "response": []
         },
         {
-          "name": "Submit Verification (missing documentKey -> 400)",
+          "name": "User Verification Status",
           "request": {
-            "auth": { "type": "noauth" },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"documentKey\": \"\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/verification/submit",
-              "host": ["{{baseUrl}}"],
-              "path": ["verification", "submit"]
-            },
-            "description": "Submit without a valid S3 object key in documentKey (expects 400 Bad Request)."
-          },
-          "response": []
-        },
-        {
-          "name": "Submit Verification (already pending/verified -> 409)",
-          "request": {
-            "auth": { "type": "noauth" },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"documentKey\": \"{{documentKey}}\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/verification/submit",
-              "host": ["{{baseUrl}}"],
-              "path": ["verification", "submit"]
-            },
-            "description": "Re-submit when state is PENDING or VERIFIED (expects 409 Conflict)."
-          },
-          "response": []
-        },
-        {
-          "name": "Get Verification Status",
-          "request": {
-            "auth": { "type": "noauth" },
             "method": "GET",
             "header": [
               {
@@ -267,15 +278,340 @@
               "raw": "{{baseUrl}}/verification/status",
               "host": ["{{baseUrl}}"],
               "path": ["verification", "status"]
-            },
-            "description": "Get current verification level and latest request details (expects 200)."
+            }
           },
           "response": []
         },
         {
-          "name": "Review Verification (as USER -> 403)",
+          "name": "User Profile",
           "request": {
-            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "me"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Demo Flow B - Rejection",
+      "description": "Register a second user, upload a document, submit verification, reject it, and confirm the user becomes REJECTED.",
+      "item": [
+        {
+          "name": "Register Rejection User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{rejectUserEmail}}\",\n  \"password\": \"{{rejectUserPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/signup",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "signup"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login Rejection User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Rejection user login succeeded\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "if (body.accessToken) {",
+                  "  pm.environment.set(\"rejectionAccessToken\", body.accessToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{rejectUserEmail}}\",\n  \"password\": \"{{rejectUserPassword}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Upload Rejection User Document",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Rejection upload succeeded\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "if (body.objectKey) {",
+                  "  pm.environment.set(\"rejectionDocumentKey\", body.objectKey);",
+                  "}",
+                  "if (body.requestId) {",
+                  "  pm.environment.set(\"rejectionUploadRequestId\", body.requestId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{rejectionAccessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Select auth-service/demo/sample-document.pdf"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/files/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["files", "upload"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Submit Rejection Verification",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Rejection submit succeeded\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "if (body.requestId) {",
+                  "  pm.environment.set(\"rejectionVerificationRequestId\", body.requestId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{rejectionAccessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentKey\": \"{{rejectionDocumentKey}}\",\n  \"requestId\": \"{{rejectionUploadRequestId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/verification/submit",
+              "host": ["{{baseUrl}}"],
+              "path": ["verification", "submit"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Admin Reject Verification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"requestId\": \"{{rejectionVerificationRequestId}}\",\n  \"decision\": \"REJECTED\",\n  \"reviewNotes\": \"Demo rejection\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/verification/review",
+              "host": ["{{baseUrl}}"],
+              "path": ["verification", "review"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Rejection User Verification Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{rejectionAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/verification/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["verification", "status"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Signup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"person@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/signup",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "signup"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"person@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "me"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Files",
+      "item": [
+        {
+          "name": "Upload File",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Select auth-service/demo/sample-document.pdf"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/files/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["files", "upload"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Verification",
+      "item": [
+        {
+          "name": "Submit Verification",
+          "request": {
             "method": "POST",
             "header": [
               {
@@ -289,21 +625,37 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"requestId\": \"PASTE_REQUEST_ID_HERE\",\n  \"decision\": \"APPROVED\",\n  \"reviewNotes\": \"Trying as regular user\"\n}"
+              "raw": "{\n  \"documentKey\": \"{{documentKey}}\",\n  \"requestId\": \"{{uploadRequestId}}\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/verification/review",
+              "raw": "{{baseUrl}}/verification/submit",
               "host": ["{{baseUrl}}"],
-              "path": ["verification", "review"]
-            },
-            "description": "Attempt to review as a regular USER (expects 403 Forbidden)."
+              "path": ["verification", "submit"]
+            }
           },
           "response": []
         },
         {
-          "name": "Review Verification (approve)",
+          "name": "Get Verification Status",
           "request": {
-            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/verification/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["verification", "status"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Review Verification - Approve",
+          "request": {
             "method": "POST",
             "header": [
               {
@@ -317,21 +669,19 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"requestId\": \"PASTE_REQUEST_ID_HERE\",\n  \"decision\": \"APPROVED\",\n  \"reviewNotes\": \"Document looks valid\"\n}"
+              "raw": "{\n  \"requestId\": \"{{verificationRequestId}}\",\n  \"decision\": \"APPROVED\",\n  \"reviewNotes\": \"Looks good\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/verification/review",
               "host": ["{{baseUrl}}"],
               "path": ["verification", "review"]
-            },
-            "description": "Approve a pending verification request (expects 200 with VERIFIED level)."
+            }
           },
           "response": []
         },
         {
-          "name": "Review Verification (reject)",
+          "name": "Review Verification - Reject",
           "request": {
-            "auth": { "type": "noauth" },
             "method": "POST",
             "header": [
               {
@@ -345,49 +695,19 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"requestId\": \"PASTE_REQUEST_ID_HERE\",\n  \"decision\": \"REJECTED\",\n  \"reviewNotes\": \"Document is blurry\"\n}"
+              "raw": "{\n  \"requestId\": \"{{verificationRequestId}}\",\n  \"decision\": \"REJECTED\",\n  \"reviewNotes\": \"Image is unreadable\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/verification/review",
               "host": ["{{baseUrl}}"],
               "path": ["verification", "review"]
-            },
-            "description": "Reject a pending verification request (expects 200 with REJECTED level)."
+            }
           },
           "response": []
         },
         {
-          "name": "Review Verification (already reviewed -> 409)",
+          "name": "List Requests",
           "request": {
-            "auth": { "type": "noauth" },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{adminToken}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"requestId\": \"PASTE_REQUEST_ID_HERE\",\n  \"decision\": \"APPROVED\",\n  \"reviewNotes\": \"Trying again\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/verification/review",
-              "host": ["{{baseUrl}}"],
-              "path": ["verification", "review"]
-            },
-            "description": "Re-review an already reviewed request (expects 409 Conflict)."
-          },
-          "response": []
-        },
-        {
-          "name": "List All Requests",
-          "request": {
-            "auth": { "type": "noauth" },
             "method": "GET",
             "header": [
               {
@@ -399,15 +719,13 @@
               "raw": "{{baseUrl}}/verification/requests",
               "host": ["{{baseUrl}}"],
               "path": ["verification", "requests"]
-            },
-            "description": "List all verification requests, newest first."
+            }
           },
           "response": []
         },
         {
-          "name": "List Requests (filter by PENDING)",
+          "name": "List Requests - PENDING",
           "request": {
-            "auth": { "type": "noauth" },
             "method": "GET",
             "header": [
               {
@@ -425,126 +743,108 @@
                   "value": "PENDING"
                 }
               ]
-            },
-            "description": "List verification requests filtered by PENDING status."
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Document Link",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/verification/requests/{{verificationRequestId}}/document-link",
+              "host": ["{{baseUrl}}"],
+              "path": ["verification", "requests", "{{verificationRequestId}}", "document-link"]
+            }
           },
           "response": []
         }
       ]
     },
     {
-      "name": "Files",
+      "name": "Health and Ops",
       "item": [
         {
-          "name": "Upload File (success)",
+          "name": "Health",
           "request": {
-            "auth": { "type": "noauth" },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "",
-                  "description": "Select a PNG, JPG, or PDF file (max 5 MB)"
-                }
-              ]
-            },
-            "url": {
-              "raw": "{{baseUrl}}/files/upload",
-              "host": ["{{baseUrl}}"],
-              "path": ["files", "upload"]
-            },
-            "description": "Upload a file to S3 (PNG, JPG, or PDF, max 5 MB). Returns bucket, objectKey, originalFilename, contentType, size, and fileUrl. Use objectKey as documentKey when submitting verification."
-          },
-          "response": [],
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Upload returns S3 metadata\", function () {",
-                  "  pm.response.to.have.status(200);",
-                  "  const body = pm.response.json();",
-                  "  pm.expect(body.bucket).to.be.a(\"string\").and.not.empty;",
-                  "  pm.expect(body.objectKey).to.be.a(\"string\").and.not.empty;",
-                  "  pm.expect(body.originalFilename).to.be.a(\"string\").and.not.empty;",
-                  "  pm.expect(body.contentType).to.be.oneOf([\"image/png\", \"image/jpeg\", \"application/pdf\"]);",
-                  "  pm.expect(body.size).to.be.a(\"number\");",
-                  "});",
-                  "",
-                  "const body = pm.response.json();",
-                  "if (body.objectKey) {",
-                  "  pm.collectionVariables.set(\"documentKey\", body.objectKey);",
-                  "  pm.collectionVariables.set(\"fileUrl\", body.objectKey);",
-                  "}"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Upload File (no token -> 401)",
-          "request": {
-            "auth": { "type": "noauth" },
-            "method": "POST",
+            "method": "GET",
             "header": [],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "",
-                  "description": "Select any file"
-                }
-              ]
-            },
             "url": {
-              "raw": "{{baseUrl}}/files/upload",
+              "raw": "{{baseUrl}}/health",
               "host": ["{{baseUrl}}"],
-              "path": ["files", "upload"]
-            },
-            "description": "Upload without auth token (expects 401 Unauthorized)."
+              "path": ["health"]
+            }
           },
           "response": []
         },
         {
-          "name": "Upload File (invalid type -> 400)",
+          "name": "Readiness",
           "request": {
-            "auth": { "type": "noauth" },
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{accessToken}}"
-              }
-            ],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": "",
-                  "description": "Select a non-allowed file type (e.g. .txt, .exe)"
-                }
-              ]
-            },
+            "method": "GET",
+            "header": [],
             "url": {
-              "raw": "{{baseUrl}}/files/upload",
+              "raw": "{{baseUrl}}/ready",
               "host": ["{{baseUrl}}"],
-              "path": ["files", "upload"]
-            },
-            "description": "Upload a file with disallowed content type (expects 400 Bad Request)."
+              "path": ["ready"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Liveness",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/live",
+              "host": ["{{baseUrl}}"],
+              "path": ["live"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Actuator Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["actuator", "health"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Actuator Metrics Index",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/metrics",
+              "host": ["{{baseUrl}}"],
+              "path": ["actuator", "metrics"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Actuator Login Metric",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/metrics/trustplatform.auth.logins",
+              "host": ["{{baseUrl}}"],
+              "path": ["actuator", "metrics", "trustplatform.auth.logins"]
+            }
           },
           "response": []
         }
