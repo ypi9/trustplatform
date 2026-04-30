@@ -152,37 +152,6 @@ User registers -> logs in -> uploads document -> submits verification
 - Add stronger token lifecycle controls such as refresh tokens, revocation, or short-lived access tokens with rotation.
 - Move from simple monolith pagination and listing toward richer admin search, filtering, and reporting APIs as operational load increases.
 
-## Interview readiness
-
-### How to explain the architecture
-
-- The service is a cloud-deployed Spring Boot monolith that owns authentication, verification workflow, admin review APIs, and storage integration in one place.
-- PostgreSQL stores relational business state such as users, profiles, verification requests, and audit logs.
-- S3 stores private document files, while the database stores only S3 object keys and metadata.
-- Admins never get public document URLs; the API generates short-lived presigned links when review access is needed.
-
-### How to explain the scaling plan
-
-- The first scaling step is horizontal API scaling behind Elastic Beanstalk because the service is stateless at the HTTP layer due to JWT auth.
-- PostgreSQL remains the source of truth for transactional state, and S3 already scales independently for document storage.
-- If load grows, the likely next moves are read/write tuning for RDS, caching, async workflows for audit and notifications, and eventually splitting verification or storage-heavy concerns into separate services.
-
-### How to explain the security design
-
-- Passwords are hashed with BCrypt and never stored in plain text.
-- Protected endpoints use Bearer JWTs validated on each request.
-- Role-based access control is enforced for admin-only review and request-listing endpoints.
-- Verification documents stay private in S3, and document access is granted through short-lived presigned URLs rather than public object access.
-- Health checks, structured logging, request correlation, and audit logs improve operational visibility without exposing private files.
-
-### How to explain the tradeoffs
-
-- I chose a monolith first to optimize for delivery speed, workflow correctness, and easier debugging.
-- I chose JWT over server-side sessions to keep the API stateless and easy to scale.
-- I chose RDS PostgreSQL because the domain is strongly relational and needs transactional consistency.
-- I chose S3 for documents because file storage and relational storage have very different needs.
-- The tradeoff is that cloud integration adds more configuration complexity up front, but it makes the system much more realistic and production-oriented.
-
 ## Tech stack
 
 - Java 21
