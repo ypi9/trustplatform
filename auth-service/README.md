@@ -89,6 +89,36 @@ The service follows a controller -> service -> repository structure. Controllers
 7. Controllers and method-level authorization use that principal and role
 ```
 
+### JWT sharing model
+
+For the MVP service split, `auth-service` is the single JWT issuer and downstream services validate the token locally.
+
+- `auth-service` issues JWTs
+- `user-service` verifies JWTs
+- `verification-service` verifies JWTs
+
+Expected token claims:
+
+```json
+{
+  "userId": "...",
+  "email": "...",
+  "role": "USER",
+  "exp": 1778176800
+}
+```
+
+MVP choice:
+
+- all services share the same `JWT_SECRET`
+- each service validates signature, expiration, and role claims locally
+
+Future upgrade:
+
+- replace the shared symmetric secret with asymmetric signing
+- publish validation keys through JWKS
+- keep `auth-service` as the issuer and let downstream services verify via public keys
+
 ### Verification workflow
 
 ```text

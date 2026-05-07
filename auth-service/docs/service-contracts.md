@@ -8,6 +8,74 @@ This document defines the future API contracts for the planned `user-service` an
 - define stable request and response shapes early
 - reduce refactor risk when internal interfaces become network calls
 
+## JWT Validation Model
+
+For the MVP split, `auth-service` remains the token issuer and downstream services validate the same JWT locally.
+
+### Token issuer
+
+- `auth-service` issues JWTs after successful login
+
+### Token consumers
+
+- `user-service` verifies incoming JWTs on protected endpoints
+- `verification-service` verifies incoming JWTs on protected endpoints
+
+### Shared JWT claims
+
+All services should expect the token payload to include:
+
+```json
+{
+  "userId": "7a9ef2d1-8d1c-4d10-8be5-7deebaf1f4bf",
+  "email": "user@example.com",
+  "role": "USER",
+  "exp": 1778176800
+}
+```
+
+Required claims:
+
+- `userId`: canonical user identifier used across services
+- `email`: current authenticated email
+- `role`: authorization role such as `USER` or `ADMIN`
+- `exp`: token expiration timestamp
+
+### MVP validation approach
+
+For the MVP, all services share the same JWT signing secret.
+
+Validation steps in each service:
+
+1. read the Bearer token from the `Authorization` header
+2. verify the token signature using the shared `JWT_SECRET`
+3. verify expiration via `exp`
+4. extract `userId`, `email`, and `role`
+5. build the local authenticated principal or security context
+6. enforce endpoint and role-based authorization locally
+
+Operational note:
+
+- this is simple and fast for an MVP
+- it also means secret distribution must be handled carefully because every validating service needs the same signing secret
+
+### Future upgrade path
+
+Once the system splits into independently deployed services, move away from a shared symmetric secret and adopt asymmetric signing.
+
+Preferred future model:
+
+- `auth-service` signs tokens with a private key
+- `user-service` and `verification-service` validate tokens with a public key
+- public keys are distributed through JWKS
+
+Benefits of the future model:
+
+- no need to copy the signing secret into every service
+- easier key rotation
+- cleaner separation between issuer and verifiers
+- safer multi-service security posture
+
 ## User Service Internal API
 
 The future `user-service` owns profile state and verification summary data. Other services should not update user-profile storage directly.
