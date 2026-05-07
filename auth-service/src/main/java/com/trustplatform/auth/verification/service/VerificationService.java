@@ -3,6 +3,8 @@ package com.trustplatform.auth.verification.service;
 import com.trustplatform.auth.audit.service.AuditLogService;
 import com.trustplatform.auth.common.metrics.AppMetricsService;
 import com.trustplatform.auth.storage.FileService;
+import com.trustplatform.auth.user.service.UserLookupClient;
+import com.trustplatform.auth.user.service.UserVerificationClient;
 import com.trustplatform.auth.verification.dto.request.ReviewVerificationRequest;
 import com.trustplatform.auth.verification.dto.response.ReviewVerificationResponse;
 import com.trustplatform.auth.verification.dto.request.SubmitVerificationRequest;
@@ -10,12 +12,8 @@ import com.trustplatform.auth.verification.dto.response.VerificationDocumentLink
 import com.trustplatform.auth.verification.dto.response.VerificationRequestItem;
 import com.trustplatform.auth.verification.dto.response.SubmitVerificationResponse;
 import com.trustplatform.auth.verification.dto.response.VerificationStatusResponse;
-import com.trustplatform.auth.user.entity.UserProfile;
-import com.trustplatform.auth.verification.entity.VerificationLevel;
 import com.trustplatform.auth.verification.entity.VerificationRequest;
 import com.trustplatform.auth.verification.entity.VerificationStatus;
-import com.trustplatform.auth.user.repository.UserProfileRepository;
-import com.trustplatform.auth.user.repository.UserRepository;
 import com.trustplatform.auth.verification.repository.VerificationRequestRepository;
 import com.trustplatform.auth.storage.dto.S3UploadResult;
 import org.springframework.data.domain.Page;
@@ -28,7 +26,6 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -52,19 +49,19 @@ public class VerificationService {
 
     private static final Duration DOCUMENT_LINK_TTL = Duration.ofMinutes(15);
 
-    private final UserRepository userRepository;
-    private final UserProfileRepository userProfileRepository;
+    private final UserLookupClient userLookupClient;
+    private final UserVerificationClient userVerificationClient;
     private final VerificationRequestRepository verificationRequestRepository;
     private final AuditLogService auditLogService;
     private final FileService fileService;
     private final AppMetricsService appMetricsService;
 
-    public VerificationService(UserRepository userRepository, UserProfileRepository userProfileRepository,
+    public VerificationService(UserLookupClient userLookupClient, UserVerificationClient userVerificationClient,
                                VerificationRequestRepository verificationRequestRepository,
                                AuditLogService auditLogService, FileService fileService,
                                AppMetricsService appMetricsService) {
-        this.userRepository = userRepository;
-        this.userProfileRepository = userProfileRepository;
+        this.userLookupClient = userLookupClient;
+        this.userVerificationClient = userVerificationClient;
         this.verificationRequestRepository = verificationRequestRepository;
         this.auditLogService = auditLogService;
         this.fileService = fileService;
@@ -76,9 +73,7 @@ public class VerificationService {
     // ──────────────────────────────────────────────
     @Transactional
     public SubmitVerificationResponse submit(String email, SubmitVerificationRequest request) {
-        // Load user
-        var user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        var user = userLookupClient.getUserByEmail(email);
 
         // Validate input
         String documentKey = request.getDocumentKey();
@@ -95,19 +90,17 @@ public class VerificationService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "requestId does not match the uploaded verification document");
         }
-        if (!fileService.isOwnedByUser(documentKey, user.getId())) {
+        if (!fileService.isOwnedByUser(documentKey, user.id())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                     "You can only submit verification documents that you uploaded");
         }
 
         S3UploadResult document = fileService.getFileMetadata(documentKey);
 
-        // Load UserProfile
-        UserProfile profile = userProfileRepository.findById(user.getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Profile not found"));
+        var profile = userVerificationClient.getRequiredProfile(user.id());
 
         // ── State machine guard: only NONE or REJECTED can submit ──
-        switch (profile.getVerificationLevel()) {
+        switch (profile.verificationLevel()) {
             case VERIFIED:
                 throw new ResponseStatusException(HttpStatus.CONFLICT,
                         "Verified users cannot submit a new verification request");
@@ -123,7 +116,7 @@ public class VerificationService {
         // Create new VerificationRequest
         VerificationRequest verificationRequest = new VerificationRequest();
         verificationRequest.setId(requestId);
-        verificationRequest.setUserId(user.getId());
+        verificationRequest.setUserId(user.id());
         verificationRequest.setDocumentKey(document.getObjectKey());
         verificationRequest.setDocumentOriginalName(document.getOriginalFilename());
         verificationRequest.setDocumentContentType(document.getContentType());
@@ -133,8 +126,7 @@ public class VerificationService {
         verificationRequestRepository.save(verificationRequest);
 
         // Update profile level: NONE/REJECTED → PENDING
-        profile.setVerificationLevel(VerificationLevel.PENDING);
-        userProfileRepository.save(profile);
+        userVerificationClient.updateVerificationStatus(user.id(), VerificationStatus.PENDING);
 
         // Audit log
         Map<String, Object> submitMetadata = new LinkedHashMap<>();
@@ -143,7 +135,7 @@ public class VerificationService {
         submitMetadata.put("documentOriginalName", document.getOriginalFilename());
         submitMetadata.put("documentContentType", document.getContentType());
         submitMetadata.put("documentSize", document.getSize());
-        auditLogService.log("verification_submitted", user.getId(), submitMetadata);
+        auditLogService.log("verification_submitted", user.id(), submitMetadata);
         appMetricsService.incrementVerificationRequests();
 
         return new SubmitVerificationResponse(
@@ -161,15 +153,12 @@ public class VerificationService {
     // STATUS: User checks their verification status
     // ──────────────────────────────────────────────
     public VerificationStatusResponse getStatus(String email) {
-        var user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
-
-        UserProfile profile = userProfileRepository.findById(user.getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Profile not found"));
+        var user = userLookupClient.getUserByEmail(email);
+        var profile = userVerificationClient.getRequiredProfile(user.id());
 
         VerificationStatusResponse.LatestRequest latestRequest = null;
 
-        var latest = verificationRequestRepository.findTopByUserIdOrderByCreatedAtDesc(user.getId());
+        var latest = verificationRequestRepository.findTopByUserIdOrderByCreatedAtDesc(user.id());
         if (latest.isPresent()) {
             VerificationRequest req = latest.get();
             latestRequest = new VerificationStatusResponse.LatestRequest(
@@ -185,7 +174,7 @@ public class VerificationService {
         }
 
         return new VerificationStatusResponse(
-                profile.getVerificationLevel().name(),
+                profile.verificationLevel().name(),
                 latestRequest
         );
     }
@@ -234,32 +223,20 @@ public class VerificationService {
         verificationRequest.setReviewNotes(request.getReviewNotes());
         verificationRequestRepository.save(verificationRequest);
 
-        // Update user profile
-        UserProfile profile = userProfileRepository.findById(verificationRequest.getUserId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Profile not found"));
-
-        if (decision == VerificationStatus.APPROVED) {
-            profile.setVerificationLevel(VerificationLevel.VERIFIED);
-            profile.setVerified(true);
-        } else {
-            profile.setVerificationLevel(VerificationLevel.REJECTED);
-            profile.setVerified(false);
-        }
-        userProfileRepository.save(profile);
+        var profile = userVerificationClient.updateVerificationStatus(verificationRequest.getUserId(), decision);
 
         // Audit log
         String action = decision == VerificationStatus.APPROVED
                 ? "verification_approved"
                 : "verification_rejected";
-        var admin = userRepository.findByEmail(reviewerEmail)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Admin user not found"));
+        var admin = userLookupClient.getUserByEmail(reviewerEmail);
         Map<String, Object> reviewMetadata = new LinkedHashMap<>();
         reviewMetadata.put("verificationRequestId", requestId);
         reviewMetadata.put("decision", decision.name());
         reviewMetadata.put("reviewedBy", reviewerEmail);
         reviewMetadata.put("reviewNotes", request.getReviewNotes() != null ? request.getReviewNotes() : "");
         reviewMetadata.put("subjectUserId", verificationRequest.getUserId());
-        auditLogService.log(action, admin.getId(), reviewMetadata);
+        auditLogService.log(action, admin.id(), reviewMetadata);
         if (decision == VerificationStatus.APPROVED) {
             appMetricsService.incrementVerificationApprovals();
         } else {
@@ -269,7 +246,7 @@ public class VerificationService {
         return new ReviewVerificationResponse(
                 requestId.toString(),
                 decision.name(),
-                profile.getVerificationLevel().name(),
+                profile.verificationLevel().name(),
                 verificationRequest.getReviewNotes(),
                 verificationRequest.getReviewedAt().toString()
         );
@@ -337,13 +314,12 @@ public class VerificationService {
 
         String downloadUrl = fileService.generateDownloadUrl(documentKey, DOCUMENT_LINK_TTL).toString();
 
-        var admin = userRepository.findByEmail(adminEmail)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Admin user not found"));
+        var admin = userLookupClient.getUserByEmail(adminEmail);
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("verificationRequestId", request.getId());
         metadata.put("documentKey", documentKey);
         metadata.put("expiresInSeconds", DOCUMENT_LINK_TTL.toSeconds());
-        auditLogService.log("document_link_generated", admin.getId(), metadata);
+        auditLogService.log("document_link_generated", admin.id(), metadata);
 
         return new VerificationDocumentLinkResponse(request.getId().toString(), downloadUrl);
     }

@@ -7,10 +7,8 @@ import com.trustplatform.auth.auth.dto.request.SignupRequest;
 import com.trustplatform.auth.common.metrics.AppMetricsService;
 import com.trustplatform.auth.user.dto.response.UserResponse;
 import com.trustplatform.auth.user.entity.User;
-import com.trustplatform.auth.user.entity.UserProfile;
-import com.trustplatform.auth.verification.entity.VerificationLevel;
-import com.trustplatform.auth.user.repository.UserProfileRepository;
 import com.trustplatform.auth.user.repository.UserRepository;
+import com.trustplatform.auth.user.service.UserProfileClient;
 import com.trustplatform.auth.auth.security.JwtService;
 import org.springframework.http.HttpStatus;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,19 +25,19 @@ import java.util.Map;
 public class AuthService {
 
     private final UserRepository userRepository;
-    private final UserProfileRepository userProfileRepository;
+    private final UserProfileClient userProfileClient;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuditLogService auditLogService;
     private final AppMetricsService appMetricsService;
     private final String bootstrapAdminEmail;
 
-    public AuthService(UserRepository userRepository, UserProfileRepository userProfileRepository,
+    public AuthService(UserRepository userRepository, UserProfileClient userProfileClient,
                        PasswordEncoder passwordEncoder, JwtService jwtService, AuditLogService auditLogService,
                        AppMetricsService appMetricsService,
                        @Value("${app.bootstrap.admin-email:}") String bootstrapAdminEmail) {
         this.userRepository = userRepository;
-        this.userProfileRepository = userProfileRepository;
+        this.userProfileClient = userProfileClient;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.auditLogService = auditLogService;
@@ -61,13 +59,7 @@ public class AuthService {
         user.setRole(isBootstrapAdminEmail(normalizedEmail) ? "ADMIN" : "USER");
         userRepository.save(user);
 
-        UserProfile profile = new UserProfile();
-        profile.setUserId(user.getId());
-        profile.setFullName("");
-        profile.setPhone("");
-        profile.setVerified(false);
-        profile.setVerificationLevel(VerificationLevel.NONE);
-        userProfileRepository.save(profile);
+        userProfileClient.createEmptyProfile(user.getId());
 
         auditLogService.log("user_registered", user.getId(), Map.of(
                 "email", user.getEmail()
@@ -110,14 +102,13 @@ public class AuthService {
         User user = userRepository.findByEmailIgnoreCase(normalizeEmail(email))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
-        UserProfile profile = userProfileRepository.findById(user.getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Profile not found"));
+        var profile = userProfileClient.getRequiredProfile(user.getId());
 
         return new UserResponse(
                 user.getId().toString(),
                 user.getEmail(),
-                profile.isVerified(),
-                profile.getVerificationLevel().name()
+                profile.verified(),
+                profile.verificationLevel().name()
         );
     }
 

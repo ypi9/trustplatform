@@ -1,13 +1,11 @@
 package com.trustplatform.auth.storage;
 
 import com.trustplatform.auth.audit.service.AuditLogService;
-import com.trustplatform.auth.user.repository.UserRepository;
 import com.trustplatform.auth.storage.dto.S3UploadResult;
 import com.trustplatform.auth.storage.service.S3StorageService;
-import org.springframework.http.HttpStatus;
+import com.trustplatform.auth.user.service.UserLookupClient;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URL;
 import java.time.Duration;
@@ -26,13 +24,13 @@ import java.util.UUID;
 public class FileService {
 
     private final AuditLogService auditLogService;
-    private final UserRepository userRepository;
+    private final UserLookupClient userLookupClient;
     private final S3StorageService s3StorageService;
 
-    public FileService(AuditLogService auditLogService, UserRepository userRepository,
+    public FileService(AuditLogService auditLogService, UserLookupClient userLookupClient,
                        S3StorageService s3StorageService) {
         this.auditLogService = auditLogService;
-        this.userRepository = userRepository;
+        this.userLookupClient = userLookupClient;
         this.s3StorageService = s3StorageService;
     }
 
@@ -45,10 +43,9 @@ public class FileService {
      * @throws ResponseStatusException 400 if file is empty, type not allowed, or size exceeded
      */
     public S3UploadResult storeFile(MultipartFile file, String email) {
-        var user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        var user = userLookupClient.getUserByEmail(email);
         UUID requestId = UUID.randomUUID();
-        S3UploadResult uploadResult = s3StorageService.upload(file, user.getId(), requestId);
+        S3UploadResult uploadResult = s3StorageService.upload(file, user.id(), requestId);
 
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("bucket", uploadResult.getBucket());
@@ -57,7 +54,7 @@ public class FileService {
         metadata.put("originalName", uploadResult.getOriginalFilename());
         metadata.put("contentType", uploadResult.getContentType());
         metadata.put("size", uploadResult.getSize());
-        auditLogService.log("file_uploaded", user.getId(), metadata);
+        auditLogService.log("file_uploaded", user.id(), metadata);
 
         return uploadResult;
     }

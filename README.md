@@ -51,6 +51,74 @@ AWS Elastic Beanstalk
                      +--> Presigned GET URLs for admin review
 ```
 
+## Future service boundaries
+
+The current implementation is intentionally monolithic, but the domain already separates cleanly into future service ownership areas. If the platform grows, these are the boundaries I would use first.
+
+### `auth-service`
+
+Primary ownership:
+
+- users
+- passwords
+- JWT issuing
+
+Responsibilities:
+
+- register users
+- authenticate credentials
+- hash and verify passwords
+- issue and validate JWTs
+- own login/signup security rules
+
+Example data ownership:
+
+- `users`
+
+### `user-service`
+
+Primary ownership:
+
+- user_profiles
+- verification summary
+
+Responsibilities:
+
+- manage user-facing profile data
+- expose current verification state for the user
+- aggregate verification results into a profile-level summary such as `NONE`, `PENDING`, `VERIFIED`, or `REJECTED`
+
+Example data ownership:
+
+- `user_profile`
+
+### `verification-service`
+
+Primary ownership:
+
+- verification_requests
+- review workflow
+- document reference
+
+Responsibilities:
+
+- accept verification submissions
+- manage the verification state machine
+- store document references and review metadata
+- support admin request listing and approval/rejection
+- generate document access for review through presigned links or delegated storage access
+
+Example data ownership:
+
+- `verification_requests`
+
+### Boundary notes
+
+- `auth-service` should remain the source of truth for identity, credentials, and token issuance.
+- `user-service` should remain the source of truth for profile state shown back to end users.
+- `verification-service` should own the verification workflow and review lifecycle end to end.
+- The current monolith already contains these concerns in one codebase, so this split is mainly a future deployment and ownership model rather than a rewrite of the domain.
+
 ## What The Project Does
 
 - Registers and authenticates users with JWTs
