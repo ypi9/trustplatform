@@ -169,6 +169,8 @@ User registers -> logs in -> uploads document -> submits verification
 
 ## API overview
 
+Detailed future service-boundary contracts live in [docs/service-contracts.md](./docs/service-contracts.md).
+
 ### Public endpoints
 
 - `POST /auth/signup`
