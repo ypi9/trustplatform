@@ -300,3 +300,62 @@ When the services split:
 1. keep the interface names stable
 2. replace local implementations with HTTP clients
 3. keep controllers and verification workflow logic unchanged where possible
+
+## First Extraction Target
+
+The recommended first extraction target is `verification-service`.
+
+### Why verification-service first
+
+- it has a clean business boundary around verification workflow
+- it already owns its main workflow table: `verification_requests`
+- it is easier to extract than `auth-service`, which currently owns login, JWT issuance, and core security wiring
+- it makes a strong microservice demo because the business flow is easy to explain end to end
+
+### Extraction checklist
+
+This is a planning checklist only. It does not need to be executed yet.
+
+1. create a new Spring Boot service or Go service for `verification-service`
+2. move verification controller, service, entity, repository, DTOs, and related workflow logic into the new service
+3. add JWT validation so the new service can verify tokens issued by `auth-service`
+4. connect the new service to the same RDS instance initially
+5. keep using the existing `verification_requests` table during the first cut
+6. replace the local `UserVerificationClient` implementation with an HTTP client that calls `user-service`
+7. replace local user lookup calls with an HTTP client or a token-claims-first approach, depending on the final boundary choice
+8. verify admin-only review authorization still works correctly with propagated role claims
+9. test the full flow:
+   - user login
+   - upload document
+   - submit verification
+   - admin list requests
+   - admin review request
+   - user sees updated verification status
+10. update deployment and environment config for the new service:
+   - RDS connection
+   - JWT secret or public key config
+   - service-to-service base URLs
+11. add operational checks:
+   - health endpoint
+   - readiness behavior
+   - logging and request correlation
+12. update demo scripts and Postman assets to call the new verification service base URL when ready
+
+### Suggested first-cut approach
+
+To reduce risk, the first extraction should keep a few things intentionally simple:
+
+- use the same RDS database at first
+- keep JWT verification local in the new service
+- keep service-to-service calls synchronous HTTP
+- defer async events, separate databases, and cross-service sagas until the boundary is stable
+
+### Success criteria
+
+The extraction is good enough for an MVP microservice demo when:
+
+- `verification-service` serves its own HTTP endpoints
+- verification workflow no longer runs inside the auth monolith
+- auth still issues JWTs successfully
+- user verification status still updates correctly through a service boundary
+- the happy path and rejection path demos both still work
